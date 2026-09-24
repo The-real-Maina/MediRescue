@@ -42,4 +42,13 @@ router.get(
 );
 
 
+// Update an emergency case status
+router.patch(
+  '/:id/status',
+  authenticate,
+  authorize('hospital_staff'),
+  caseController.updateCaseStatus
+);
+
+
 module.exports = router;
