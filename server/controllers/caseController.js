@@ -1,5 +1,9 @@
 const pool = require('../config/db');
 
+
+// ==========================================
+// CREATE EMERGENCY CASE
+// ==========================================
 exports.createCase = async (req, res) => {
   const patientId = req.user.id;
 
@@ -58,9 +62,9 @@ exports.createCase = async (req, res) => {
 
     const caseId = result.insertId;
 
-    // Record initial case status.
+    // Record initial case status
     // changed_by is NULL because no staff member
-    // has handled the emergency yet.
+    // has handled the emergency yet
     await connection.query(
       `INSERT INTO case_status_log
       (
@@ -73,7 +77,7 @@ exports.createCase = async (req, res) => {
       [caseId]
     );
 
-    // Everything succeeded
+    // Save both operations
     await connection.commit();
 
     res.status(201).json({
@@ -84,6 +88,7 @@ exports.createCase = async (req, res) => {
 
   } catch (err) {
 
+    // Undo database changes if something failed
     if (connection) {
       await connection.rollback();
     }
@@ -99,5 +104,43 @@ exports.createCase = async (req, res) => {
     if (connection) {
       connection.release();
     }
+  }
+};
+
+
+// ==========================================
+// GET LOGGED-IN PATIENT'S CASES
+// ==========================================
+exports.getMyCases = async (req, res) => {
+  const patientId = req.user.id;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+        c.id,
+        c.emergency_desc,
+        c.status,
+        c.severity,
+        c.pickup_lat,
+        c.pickup_lng,
+        c.requested_at,
+        h.id AS hospital_id,
+        h.name AS hospital_name,
+        h.location AS hospital_location
+      FROM \`case\` c
+      JOIN hospital h ON c.hospital_id = h.id
+      WHERE c.patient_id = ?
+      ORDER BY c.requested_at DESC`,
+      [patientId]
+    );
+
+    res.status(200).json(rows);
+
+  } catch (err) {
+    console.error('Get patient cases error:', err);
+
+    res.status(500).json({
+      error: err.message
+    });
   }
 };
