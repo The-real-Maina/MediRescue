@@ -7,6 +7,10 @@ const caseController = require('../controllers/caseController');
 const { authenticate, authorize } = require('../middleware/auth');
 
 
+// ==========================================
+// PATIENT ROUTES
+// ==========================================
+
 // Create a new emergency case
 router.post(
   '/',
@@ -22,6 +26,19 @@ router.get(
   authenticate,
   authorize('patient'),
   caseController.getMyCases
+);
+
+
+// ==========================================
+// HOSPITAL STAFF ROUTES
+// ==========================================
+
+// Get emergency cases belonging to staff's hospital
+router.get(
+  '/hospital',
+  authenticate,
+  authorize('hospital_staff'),
+  caseController.getHospitalCases
 );
 
 

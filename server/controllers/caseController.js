@@ -63,8 +63,6 @@ exports.createCase = async (req, res) => {
     const caseId = result.insertId;
 
     // Record initial case status
-    // changed_by is NULL because no staff member
-    // has handled the emergency yet
     await connection.query(
       `INSERT INTO case_status_log
       (
@@ -77,7 +75,6 @@ exports.createCase = async (req, res) => {
       [caseId]
     );
 
-    // Save both operations
     await connection.commit();
 
     res.status(201).json({
@@ -88,7 +85,6 @@ exports.createCase = async (req, res) => {
 
   } catch (err) {
 
-    // Undo database changes if something failed
     if (connection) {
       await connection.rollback();
     }
@@ -137,7 +133,57 @@ exports.getMyCases = async (req, res) => {
     res.status(200).json(rows);
 
   } catch (err) {
+
     console.error('Get patient cases error:', err);
+
+    res.status(500).json({
+      error: err.message
+    });
+  }
+};
+
+
+// ==========================================
+// GET CASES FOR LOGGED-IN HOSPITAL STAFF
+// ==========================================
+exports.getHospitalCases = async (req, res) => {
+  const hospitalId = req.user.hospital_id;
+
+  if (!hospitalId) {
+    return res.status(400).json({
+      error: 'Staff account is not assigned to a hospital'
+    });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+        c.id,
+        c.patient_id,
+        p.name AS patient_name,
+        p.phone AS patient_phone,
+        c.emergency_desc,
+        c.status,
+        c.severity,
+        c.pickup_lat,
+        c.pickup_lng,
+        c.requested_at,
+        c.arrival_at,
+        c.closed_at,
+        c.ambulance_id,
+        c.staff_id
+      FROM \`case\` c
+      JOIN patient p ON c.patient_id = p.id
+      WHERE c.hospital_id = ?
+      ORDER BY c.requested_at DESC`,
+      [hospitalId]
+    );
+
+    res.status(200).json(rows);
+
+  } catch (err) {
+
+    console.error('Get hospital cases error:', err);
 
     res.status(500).json({
       error: err.message
