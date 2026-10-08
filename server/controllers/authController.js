@@ -1,11 +1,12 @@
+
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-
 // ==========================================
 // REGISTER PATIENT
 // ==========================================
+
 exports.registerPatient = async (req, res) => {
   const {
     name,
@@ -16,24 +17,21 @@ exports.registerPatient = async (req, res) => {
     chronic_conditions,
     next_of_kin_name,
     next_of_kin_phone
-  } = req.body;
+  } = req.body || {};
 
   try {
-    // Required fields
     if (!name || !phone || !password) {
       return res.status(400).json({
         error: 'Name, phone and password are required'
       });
     }
 
-    // Password length
-    if (password.length < 6) {
+    if (typeof password !== 'string' || password.length < 6) {
       return res.status(400).json({
         error: 'Password must be at least 6 characters'
       });
     }
 
-    // Check if patient already exists
     const [existing] = await pool.query(
       'SELECT id FROM patient WHERE phone = ?',
       [phone]
@@ -45,10 +43,8 @@ exports.registerPatient = async (req, res) => {
       });
     }
 
-    // Hash password
     const password_hash = await bcrypt.hash(password, 10);
 
-    // Insert patient
     const [result] = await pool.query(
       `INSERT INTO patient
       (
@@ -87,29 +83,75 @@ exports.registerPatient = async (req, res) => {
     console.error('Registration error:', err);
 
     res.status(500).json({
-      error: err.message
+      error: 'Patient registration failed'
     });
   }
 };
 
 
 // ==========================================
-// LOGIN
+// LOGIN: PATIENT, HOSPITAL STAFF, SUPER ADMIN
 // ==========================================
+
 exports.login = async (req, res) => {
-  const { email, phone, password, role } = req.body;
+  const {
+    email,
+    phone,
+    password,
+    role
+  } = req.body || {};
+
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({
+      error: 'Password is required'
+    });
+  }
+
+  if (!['patient', 'hospital_staff', 'super_admin'].includes(role)) {
+    return res.status(400).json({
+      error: 'Invalid login role'
+    });
+  }
+
+  if (role === 'patient' && !phone) {
+    return res.status(400).json({
+      error: 'Phone number is required'
+    });
+  }
+
+  if (role !== 'patient' && !email) {
+    return res.status(400).json({
+      error: 'Email address is required'
+    });
+  }
 
   try {
     let rows;
 
+    // PATIENT LOGIN
     if (role === 'patient') {
       [rows] = await pool.query(
         'SELECT * FROM patient WHERE phone = ?',
         [phone]
       );
-    } else {
+    }
+
+    // HOSPITAL STAFF LOGIN
+    else if (role === 'hospital_staff') {
       [rows] = await pool.query(
-        'SELECT * FROM staff WHERE email = ?',
+        `SELECT * FROM staff
+         WHERE email = ?
+         AND role = 'hospital_staff'`,
+        [email]
+      );
+    }
+
+    // SUPER ADMIN LOGIN
+    else if (role === 'super_admin') {
+      [rows] = await pool.query(
+        `SELECT * FROM admin
+         WHERE email = ?
+         AND role = 'super_admin'`,
         [email]
       );
     }
@@ -133,22 +175,34 @@ exports.login = async (req, res) => {
       });
     }
 
+    const userRole =
+      role === 'patient' ? 'patient' : user.role;
+
+    const hospitalId =
+      userRole === 'hospital_staff'
+        ? user.hospital_id
+        : null;
+
     const token = jwt.sign(
       {
         id: user.id,
-        role: role === 'patient' ? 'patient' : user.role,
-        hospital_id: user.hospital_id || null
+        role: userRole,
+        hospital_id: hospitalId
       },
       process.env.JWT_SECRET,
-      { expiresIn: '8h' }
+      {
+        expiresIn: '8h'
+      }
     );
 
-    res.json({
+    res.status(200).json({
+      message: 'Login successful',
       token,
       user: {
         id: user.id,
         name: user.name,
-        role: role === 'patient' ? 'patient' : user.role
+        role: userRole,
+        hospital_id: hospitalId
       }
     });
 
@@ -156,7 +210,7 @@ exports.login = async (req, res) => {
     console.error('Login error:', err);
 
     res.status(500).json({
-      error: err.message
+      error: 'Login failed. Please try again.'
     });
   }
 };

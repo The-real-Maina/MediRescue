@@ -51,4 +51,13 @@ router.patch(
 );
 
 
+// Assign ambulance to emergency case
+router.patch(
+  '/:id/ambulance',
+  authenticate,
+  authorize('hospital_staff'),
+  caseController.assignAmbulance
+);
+
+
 module.exports = router;
