@@ -70,7 +70,7 @@ exports.registerPatient = async (req, res) => {
       ]
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       message: 'Patient registered successfully',
       patient: {
         id: result.insertId,
@@ -82,7 +82,7 @@ exports.registerPatient = async (req, res) => {
   } catch (err) {
     console.error('Registration error:', err);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Patient registration failed'
     });
   }
@@ -90,7 +90,8 @@ exports.registerPatient = async (req, res) => {
 
 
 // ==========================================
-// LOGIN: PATIENT, HOSPITAL STAFF, SUPER ADMIN
+// LOGIN
+// PATIENT, HOSPITAL STAFF, SUPER ADMIN, DRIVER
 // ==========================================
 
 exports.login = async (req, res) => {
@@ -101,24 +102,35 @@ exports.login = async (req, res) => {
     role
   } = req.body || {};
 
+  // VALIDATE PASSWORD
   if (!password || typeof password !== 'string') {
     return res.status(400).json({
       error: 'Password is required'
     });
   }
 
-  if (!['patient', 'hospital_staff', 'super_admin'].includes(role)) {
+  // VALIDATE ROLE
+  const allowedRoles = [
+    'patient',
+    'hospital_staff',
+    'super_admin',
+    'driver'
+  ];
+
+  if (!allowedRoles.includes(role)) {
     return res.status(400).json({
       error: 'Invalid login role'
     });
   }
 
+  // PATIENT USES PHONE
   if (role === 'patient' && !phone) {
     return res.status(400).json({
       error: 'Phone number is required'
     });
   }
 
+  // STAFF, ADMIN AND DRIVER USE EMAIL
   if (role !== 'patient' && !email) {
     return res.status(400).json({
       error: 'Email address is required'
@@ -126,9 +138,12 @@ exports.login = async (req, res) => {
   }
 
   try {
-    let rows;
+    let rows = [];
 
+    // ======================================
     // PATIENT LOGIN
+    // ======================================
+
     if (role === 'patient') {
       [rows] = await pool.query(
         'SELECT * FROM patient WHERE phone = ?',
@@ -136,7 +151,10 @@ exports.login = async (req, res) => {
       );
     }
 
+    // ======================================
     // HOSPITAL STAFF LOGIN
+    // ======================================
+
     else if (role === 'hospital_staff') {
       [rows] = await pool.query(
         `SELECT * FROM staff
@@ -146,7 +164,23 @@ exports.login = async (req, res) => {
       );
     }
 
+    // ======================================
+    // AMBULANCE DRIVER LOGIN
+    // ======================================
+
+    else if (role === 'driver') {
+      [rows] = await pool.query(
+        `SELECT * FROM staff
+         WHERE email = ?
+         AND role = 'driver'`,
+        [email]
+      );
+    }
+
+    // ======================================
     // SUPER ADMIN LOGIN
+    // ======================================
+
     else if (role === 'super_admin') {
       [rows] = await pool.query(
         `SELECT * FROM admin
@@ -156,6 +190,10 @@ exports.login = async (req, res) => {
       );
     }
 
+    // ======================================
+    // CHECK ACCOUNT
+    // ======================================
+
     if (rows.length === 0) {
       return res.status(401).json({
         error: 'Invalid credentials'
@@ -163,6 +201,10 @@ exports.login = async (req, res) => {
     }
 
     const user = rows[0];
+
+    // ======================================
+    // VERIFY PASSWORD
+    // ======================================
 
     const match = await bcrypt.compare(
       password,
@@ -175,13 +217,27 @@ exports.login = async (req, res) => {
       });
     }
 
+    // ======================================
+    // DETERMINE USER ROLE
+    // ======================================
+
     const userRole =
-      role === 'patient' ? 'patient' : user.role;
+      role === 'patient'
+        ? 'patient'
+        : user.role;
+
+    // ======================================
+    // DETERMINE HOSPITAL
+    // ======================================
 
     const hospitalId =
-      userRole === 'hospital_staff'
+      ['hospital_staff', 'driver'].includes(userRole)
         ? user.hospital_id
         : null;
+
+    // ======================================
+    // GENERATE JWT TOKEN
+    // ======================================
 
     const token = jwt.sign(
       {
@@ -195,7 +251,11 @@ exports.login = async (req, res) => {
       }
     );
 
-    res.status(200).json({
+    // ======================================
+    // LOGIN RESPONSE
+    // ======================================
+
+    return res.status(200).json({
       message: 'Login successful',
       token,
       user: {
@@ -209,7 +269,7 @@ exports.login = async (req, res) => {
   } catch (err) {
     console.error('Login error:', err);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Login failed. Please try again.'
     });
   }

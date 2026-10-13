@@ -3,17 +3,29 @@ import {
   BrowserRouter,
   Routes,
   Route,
-  Link,
   Navigate
 } from 'react-router-dom'
 
+// HOMEPAGE
+import Home from './pages/Home'
+
+// AUTHENTICATION
 import Login from './pages/Login'
 import Register from './pages/Register'
+
+// PATIENT PAGES
 import PatientDashboard from './pages/PatientDashboard'
 import EmergencyRequest from './pages/EmergencyRequest'
 import MyCases from './pages/MyCases'
 import PayNow from './pages/PayNow'
+
+// HOSPITAL STAFF
 import StaffDashboard from './pages/StaffDashboard'
+
+// AMBULANCE DRIVER
+import DriverDashboard from './pages/DriverDashboard'
+
+// ADMIN PAGES
 import AdminDashboard from './pages/AdminDashboard'
 import HospitalManagement from './pages/HospitalManagement'
 import EmergencyMonitoring from './pages/EmergencyMonitoring'
@@ -49,61 +61,6 @@ function ProtectedRoute({ children, allowedRole }) {
 }
 
 // ==========================================
-// HOME PAGE
-// ==========================================
-
-function Home() {
-  return (
-    <div className="app">
-      <header className="navbar">
-        <h2>MediRescue</h2>
-
-        <nav>
-          <a href="#home">Home</a>
-          <a href="#about">About</a>
-
-          <Link to="/login">
-            <button>Login</button>
-          </Link>
-        </nav>
-      </header>
-
-      <main className="home" id="home">
-        <div className="home-content">
-          <p className="tagline">
-            Emergency Medical Response
-          </p>
-
-          <h1>
-            Fast Help When Every Second Matters
-          </h1>
-
-          <p>
-            MediRescue connects patients with nearby
-            hospitals and emergency medical responders
-            for faster emergency assistance.
-          </p>
-
-          <div className="home-buttons">
-            <Link to="/login">
-              <button className="emergency-btn">
-                Request Emergency Help
-              </button>
-            </Link>
-
-            <Link to="/login">
-              <button className="login-btn">
-                Login
-              </button>
-            </Link>
-          </div>
-        </div>
-      </main>
-    </div>
-  )
-}
-
-// ==========================================
 // APPLICATION ROUTES
 // ==========================================
 
@@ -112,12 +69,23 @@ function App() {
     <BrowserRouter>
       <Routes>
 
-        {/* HOME */}
-        <Route path="/" element={<Home />} />
+        {/* PUBLIC HOMEPAGE */}
+        <Route
+          path="/"
+          element={<Home />}
+        />
 
-        {/* AUTHENTICATION */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        {/* LOGIN */}
+        <Route
+          path="/login"
+          element={<Login />}
+        />
+
+        {/* REGISTRATION */}
+        <Route
+          path="/register"
+          element={<Register />}
+        />
 
         {/* PATIENT DASHBOARD */}
         <Route
@@ -149,7 +117,7 @@ function App() {
           }
         />
 
-        {/* PATIENT M-PESA PAYMENT */}
+        {/* M-PESA PAYMENT */}
         <Route
           path="/pay-now"
           element={
@@ -159,12 +127,22 @@ function App() {
           }
         />
 
-        {/* HOSPITAL STAFF */}
+        {/* HOSPITAL STAFF DASHBOARD */}
         <Route
           path="/staff-dashboard"
           element={
             <ProtectedRoute allowedRole="hospital_staff">
               <StaffDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* AMBULANCE DRIVER DASHBOARD */}
+        <Route
+          path="/driver-dashboard"
+          element={
+            <ProtectedRoute allowedRole="driver">
+              <DriverDashboard />
             </ProtectedRoute>
           }
         />

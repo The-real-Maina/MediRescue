@@ -12,21 +12,14 @@ const {
 
 exports.initiatePayment = async (req, res) => {
   const patientId = req.user.id;
-  const { case_id, phone_number, amount } = req.body || {};
+  const { case_id, phone_number } = req.body || {};
 
   const caseId = Number(case_id);
-  const paymentAmount = Number(amount);
   const phone = String(phone_number || '').replace(/\D/g, '');
 
   if (!Number.isSafeInteger(caseId) || caseId <= 0) {
     return res.status(400).json({
       error: 'Invalid case ID'
-    });
-  }
-
-  if (!Number.isSafeInteger(paymentAmount) || paymentAmount <= 0) {
-    return res.status(400).json({
-      error: 'Amount must be a positive whole number'
     });
   }
 
@@ -38,7 +31,7 @@ exports.initiatePayment = async (req, res) => {
 
   try {
     const [cases] = await pool.query(
-      `SELECT id, hospital_id, status
+      `SELECT id, hospital_id, status, payment_amount
        FROM \`case\`
        WHERE id = ? AND patient_id = ?`,
       [caseId, patientId]
@@ -55,6 +48,20 @@ exports.initiatePayment = async (req, res) => {
     if (emergencyCase.status !== 'payment_pending') {
       return res.status(409).json({
         error: 'This case is not ready for payment'
+      });
+    }
+
+    // Payment amount must come from the database.
+    const paymentAmount = Number(
+      emergencyCase.payment_amount
+    );
+
+    if (
+      !Number.isSafeInteger(paymentAmount) ||
+      paymentAmount <= 0
+    ) {
+      return res.status(400).json({
+        error: 'No valid payment amount assigned to this case'
       });
     }
 
@@ -75,9 +82,12 @@ exports.initiatePayment = async (req, res) => {
 
     const callbackUrl = process.env.MPESA_CALLBACK_URL;
 
-    if (!callbackUrl) {
+    if (
+      !callbackUrl ||
+      !/^https:\/\//i.test(callbackUrl)
+    ) {
       return res.status(500).json({
-        error: 'M-Pesa callback URL is not configured'
+        error: 'A valid HTTPS M-Pesa callback URL is required'
       });
     }
 
@@ -120,6 +130,7 @@ exports.initiatePayment = async (req, res) => {
     return res.status(202).json({
       message: 'M-Pesa payment request initiated',
       case_id: caseId,
+      amount: paymentAmount,
       checkout_request_id: result.CheckoutRequestID,
       status: 'pending'
     });
@@ -182,12 +193,11 @@ exports.checkPaymentStatus = async (req, res) => {
       });
     }
 
+    // Verify payment directly with Safaricom.
     const result = await queryStkPushStatus(
       payment.checkout_request_id
     );
 
-    // ResponseCode 0 means the query was accepted.
-    // ResultCode 0 means the transaction succeeded.
     if (String(result.ResponseCode) !== '0') {
       return res.status(200).json({
         case_id: caseId,
@@ -196,11 +206,10 @@ exports.checkPaymentStatus = async (req, res) => {
       });
     }
 
-    const resultCode = Number(result.ResultCode);
-
     if (
       result.ResultCode === undefined ||
-      !Number.isInteger(resultCode)
+      result.ResultCode === null ||
+      String(result.ResultCode).trim() === ''
     ) {
       return res.status(200).json({
         case_id: caseId,
@@ -209,34 +218,106 @@ exports.checkPaymentStatus = async (req, res) => {
       });
     }
 
-    const newStatus = resultCode === 0
-      ? 'completed'
-      : 'failed';
+    const resultCode = Number(result.ResultCode);
 
-    await pool.query(
-      `UPDATE payment
-       SET status = ?,
-           paid_at = CASE
-             WHEN ? = 'completed' THEN NOW()
-             ELSE NULL
-           END
-       WHERE id = ?
-         AND status = 'pending'`,
-      [newStatus, newStatus, payment.id]
-    );
+    if (!Number.isInteger(resultCode)) {
+      return res.status(200).json({
+        case_id: caseId,
+        status: 'pending',
+        message: 'Safaricom returned an invalid result code'
+      });
+    }
 
-    const [updated] = await pool.query(
-      `SELECT status
-       FROM payment
-       WHERE id = ?`,
-      [payment.id]
-    );
+    const newStatus =
+      resultCode === 0 ? 'completed' : 'failed';
 
-    return res.status(200).json({
-      case_id: caseId,
-      status: updated[0].status,
-      result_code: resultCode
-    });
+    // Update payment and emergency case together.
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [lockedPayments] = await connection.query(
+        `SELECT id, status
+         FROM payment
+         WHERE id = ?
+         FOR UPDATE`,
+        [payment.id]
+      );
+
+      if (lockedPayments.length === 0) {
+        await connection.rollback();
+
+        return res.status(404).json({
+          error: 'Payment record not found'
+        });
+      }
+
+      // Avoid processing the same payment twice.
+      if (lockedPayments[0].status !== 'pending') {
+        await connection.rollback();
+
+        return res.status(200).json({
+          case_id: caseId,
+          status: lockedPayments[0].status
+        });
+      }
+
+      await connection.query(
+        `UPDATE payment
+         SET status = ?,
+             paid_at = CASE
+               WHEN ? = 'completed' THEN NOW()
+               ELSE NULL
+             END
+         WHERE id = ?
+           AND status = 'pending'`,
+        [newStatus, newStatus, payment.id]
+      );
+
+      if (newStatus === 'completed') {
+        // Only mark a case as paid after verification.
+        const [caseUpdate] = await connection.query(
+          `UPDATE \`case\`
+           SET status = 'paid'
+           WHERE id = ?
+             AND status = 'payment_pending'`,
+          [caseId]
+        );
+
+        if (caseUpdate.affectedRows !== 1) {
+          throw new Error(
+            'Emergency case is not awaiting payment'
+          );
+        }
+
+        await connection.query(
+          `INSERT INTO case_status_log
+           (
+             case_id,
+             status,
+             changed_by,
+             changed_at
+           )
+           VALUES (?, 'paid', NULL, NOW())`,
+          [caseId]
+        );
+      }
+
+      await connection.commit();
+
+      return res.status(200).json({
+        case_id: caseId,
+        status: newStatus,
+        result_code: resultCode
+      });
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
 
   } catch (error) {
     console.error(
@@ -268,8 +349,8 @@ exports.handleCallback = async (req, res) => {
     });
   }
 
-  // The callback is not authenticated.
-  // Do not update payment status based on it alone.
+  // Do not use an unauthenticated callback alone
+  // to mark a payment as completed.
   console.log(
     'M-Pesa callback received for checkout:',
     callback.CheckoutRequestID

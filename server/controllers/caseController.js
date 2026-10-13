@@ -43,12 +43,28 @@ exports.createCase = async (req, res) => {
     });
   }
 
+  const normalizedSeverity = severity || 'moderate';
+
+  const validSeverities = [
+    'low',
+    'moderate',
+    'high',
+    'critical'
+  ];
+
+  if (!validSeverities.includes(normalizedSeverity)) {
+    return res.status(400).json({
+      error: 'Invalid emergency severity'
+    });
+  }
+
   let connection;
 
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
+    // Get hospitals with valid coordinates.
     const [hospitals] = await connection.query(`
       SELECT
         id,
@@ -69,9 +85,8 @@ exports.createCase = async (req, res) => {
       });
     }
 
-    const toRadians = (degrees) => {
-      return degrees * (Math.PI / 180);
-    };
+    const toRadians = (degrees) =>
+      degrees * (Math.PI / 180);
 
     const earthRadiusKm = 6371;
 
@@ -91,12 +106,10 @@ exports.createCase = async (req, res) => {
       );
 
       const a =
-        Math.sin(latDifference / 2) *
-          Math.sin(latDifference / 2) +
+        Math.sin(latDifference / 2) ** 2 +
         Math.cos(toRadians(patientLat)) *
           Math.cos(toRadians(hospitalLat)) *
-          Math.sin(lngDifference / 2) *
-          Math.sin(lngDifference / 2);
+          Math.sin(lngDifference / 2) ** 2;
 
       const c = 2 * Math.atan2(
         Math.sqrt(a),
@@ -119,26 +132,50 @@ exports.createCase = async (req, res) => {
       });
     }
 
+    // Retrieve the configured price for this hospital
+    // and emergency severity.
+    const [prices] = await connection.query(
+      `
+        SELECT amount
+        FROM hospital_service_prices
+        WHERE hospital_id = ?
+          AND service_name = 'Emergency Response'
+          AND severity = ?
+        LIMIT 1
+      `,
+      [nearestHospital.id, normalizedSeverity]
+    );
+
+    // Missing pricing must not block an emergency request.
+    // A null amount indicates billing is not yet configured.
+    const paymentAmount =
+      prices.length > 0
+        ? Number(prices[0].amount)
+        : null;
+
+    // Create emergency case with its calculated charge.
     const [result] = await connection.query(
       `
-      INSERT INTO \`case\`
-      (
-        patient_id,
-        hospital_id,
-        emergency_desc,
-        status,
-        severity,
-        pickup_lat,
-        pickup_lng,
-        requested_at
-      )
-      VALUES (?, ?, ?, 'requested', ?, ?, ?, NOW())
+        INSERT INTO \`case\`
+        (
+          patient_id,
+          hospital_id,
+          emergency_desc,
+          status,
+          severity,
+          payment_amount,
+          pickup_lat,
+          pickup_lng,
+          requested_at
+        )
+        VALUES (?, ?, ?, 'requested', ?, ?, ?, ?, NOW())
       `,
       [
         patientId,
         nearestHospital.id,
         emergency_desc || emergency_type,
-        severity || 'moderate',
+        normalizedSeverity,
+        paymentAmount,
         patientLat,
         patientLng
       ]
@@ -148,14 +185,14 @@ exports.createCase = async (req, res) => {
 
     await connection.query(
       `
-      INSERT INTO case_status_log
-      (
-        case_id,
-        status,
-        changed_by,
-        changed_at
-      )
-      VALUES (?, 'requested', NULL, NOW())
+        INSERT INTO case_status_log
+        (
+          case_id,
+          status,
+          changed_by,
+          changed_at
+        )
+        VALUES (?, 'requested', NULL, NOW())
       `,
       [caseId]
     );
@@ -166,6 +203,8 @@ exports.createCase = async (req, res) => {
       message: 'Emergency request sent successfully',
       case_id: caseId,
       status: 'requested',
+      severity: normalizedSeverity,
+      payment_amount: paymentAmount,
       hospital: {
         id: nearestHospital.id,
         name: nearestHospital.name,
@@ -202,22 +241,23 @@ exports.getMyCases = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `
-      SELECT
-        c.id,
-        c.emergency_desc,
-        c.status,
-        c.severity,
-        c.pickup_lat,
-        c.pickup_lng,
-        c.requested_at,
-        h.id AS hospital_id,
-        h.name AS hospital_name,
-        h.location AS hospital_location
-      FROM \`case\` c
-      JOIN hospital h
-        ON c.hospital_id = h.id
-      WHERE c.patient_id = ?
-      ORDER BY c.requested_at DESC
+        SELECT
+          c.id,
+          c.emergency_desc,
+          c.status,
+          c.severity,
+          c.payment_amount,
+          c.pickup_lat,
+          c.pickup_lng,
+          c.requested_at,
+          h.id AS hospital_id,
+          h.name AS hospital_name,
+          h.location AS hospital_location
+        FROM \`case\` c
+        JOIN hospital h
+          ON c.hospital_id = h.id
+        WHERE c.patient_id = ?
+        ORDER BY c.requested_at DESC
       `,
       [patientId]
     );
@@ -232,7 +272,6 @@ exports.getMyCases = async (req, res) => {
     });
   }
 };
-
 // ==========================================
 // GET CASES FOR LOGGED-IN HOSPITAL STAFF
 // ==========================================
@@ -630,7 +669,31 @@ exports.assignAmbulance = async (req, res) => {
         error: 'Ambulance is not available'
       });
     }
+// Check whether the ambulance has a driver
+if (!ambulance.driver_id) {
+  await connection.rollback();
 
+  return res.status(409).json({
+    error: 'Cannot dispatch an ambulance without an assigned driver'
+  });
+}
+
+// Confirm the driver belongs to this hospital
+const [drivers] = await connection.query(
+  `SELECT id FROM staff
+   WHERE id = ?
+   AND hospital_id = ?
+   AND role = 'driver'`,
+  [ambulance.driver_id, hospitalId]
+);
+
+if (drivers.length === 0) {
+  await connection.rollback();
+
+  return res.status(409).json({
+    error: 'Invalid ambulance driver'
+  });
+}
     // ======================================
     // ASSIGN AMBULANCE
     // ======================================

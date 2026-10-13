@@ -21,6 +21,7 @@ router.use(authorize('super_admin'));
 // ADMIN DASHBOARD STATISTICS
 // ==========================================
 
+
 router.get('/stats', async (req, res) => {
   try {
     const [
@@ -40,23 +41,44 @@ router.get('/stats', async (req, res) => {
       pool.query(
         "SELECT COUNT(*) AS total FROM ambulance WHERE status = 'available'"
       ),
-      pool.query('SELECT COUNT(*) AS total FROM payment')
+      pool.query(`
+        SELECT
+          COUNT(*) AS total,
+          COALESCE(SUM(status = 'completed'), 0) AS completed,
+          COALESCE(SUM(status = 'pending'), 0) AS pending,
+          COALESCE(SUM(status = 'failed'), 0) AS failed,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN status = 'completed' THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS totalRevenue
+        FROM payment
+      `)
     ]);
 
-    res.json({
+    return res.json({
       hospitals: hospitalRows[0].total,
       patients: patientRows[0].total,
       staff: staffRows[0].total,
       emergencies: caseRows[0].total,
       ambulances: ambulanceRows[0].total,
       availableAmbulances: availableRows[0].total,
-      payments: paymentRows[0].total
+
+      payments: paymentRows[0].total,
+      completedPayments: Number(paymentRows[0].completed),
+      pendingPayments: Number(paymentRows[0].pending),
+      failedPayments: Number(paymentRows[0].failed),
+      totalRevenue: Number(paymentRows[0].totalRevenue)
     });
 
   } catch (error) {
     console.error('Admin statistics error:', error);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to retrieve dashboard statistics'
     });
   }

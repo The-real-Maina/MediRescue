@@ -1,31 +1,285 @@
-
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = 'http://localhost:5000/api/mpesa/initiate'
+const API_URL = 'http://localhost:5000/api'
+const POLL_INTERVAL = 10000
+const MAX_CHECKS = 12
 
 function PayNow() {
   const navigate = useNavigate()
 
+  const [cases, setCases] = useState([])
   const [caseId, setCaseId] = useState('')
   const [phone, setPhone] = useState('')
-  const [amount, setAmount] = useState('')
+  const [loadingCases, setLoadingCases] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [result, setResult] = useState(null)
 
-  // Initiate M-Pesa payment
-  const handlePayment = async (e) => {
-    e.preventDefault()
+  const timerRef = useRef(null)
+  const activeRef = useRef(false)
+  const requestRef = useRef(0)
+  const checksRef = useRef(0)
+  const mountedRef = useRef(false)
+
+  const selectedCase = cases.find(
+    (item) => String(item.id) === String(caseId)
+  )
+
+  const eligibleCases = cases.filter(
+    (item) =>
+      item.status === 'payment_pending' &&
+      Number(item.payment_amount) > 0
+  )
+
+  const amount = selectedCase
+    ? Number(selectedCase.payment_amount)
+    : 0
+
+  const getToken = () =>
+    localStorage.getItem('medirescue_token')
+
+  const stopChecking = useCallback(() => {
+    activeRef.current = false
+    requestRef.current += 1
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
+    if (mountedRef.current) {
+      setChecking(false)
+    }
+  }, [])
+
+  const loadCases = useCallback(async () => {
+    const token = getToken()
+
+    if (!token) {
+      navigate('/login')
+      return
+    }
+
+    setLoadingCases(true)
+
+    try {
+      const response = await fetch(`${API_URL}/cases`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        navigate('/login')
+        return
+      }
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Unable to load emergency cases'
+        )
+      }
+
+      if (!Array.isArray(data)) {
+        throw new Error('Unexpected response from cases API')
+      }
+
+      if (!mountedRef.current) return
+
+      setCases(data)
+
+      const eligible = data.filter(
+        (item) =>
+          item.status === 'payment_pending' &&
+          Number(item.payment_amount) > 0
+      )
+
+      setCaseId((previous) =>
+        eligible.some((item) => String(item.id) === previous)
+          ? previous
+          : eligible.length === 1
+            ? String(eligible[0].id)
+            : ''
+      )
+    } catch (err) {
+      if (mountedRef.current) {
+        setError(err.message || 'Failed to load cases')
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoadingCases(false)
+      }
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    mountedRef.current = true
+    loadCases()
+
+    return () => {
+      mountedRef.current = false
+      activeRef.current = false
+      requestRef.current += 1
+
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+    }
+  }, [loadCases])
+
+  const checkPaymentStatus = async (id, requestId) => {
+    if (
+      !activeRef.current ||
+      requestId !== requestRef.current
+    ) {
+      return
+    }
+
+    const token = getToken()
+
+    if (!token) {
+      stopChecking()
+      navigate('/login')
+      return
+    }
+
+    checksRef.current += 1
+
+    try {
+      const response = await fetch(
+        `${API_URL}/mpesa/status/${encodeURIComponent(id)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      )
+
+      const data = await response.json()
+
+      if (
+        !mountedRef.current ||
+        !activeRef.current ||
+        requestId !== requestRef.current
+      ) {
+        return
+      }
+
+      if (response.status === 401) {
+        stopChecking()
+        navigate('/login')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Unable to check payment status'
+        )
+      }
+
+      if (data.status === 'completed') {
+        setResult((previous) => ({
+          ...previous,
+          status: 'completed',
+          result_code: data.result_code
+        }))
+
+        setNotice('Payment confirmed by the backend.')
+        stopChecking()
+        await loadCases()
+        return
+      }
+
+      if (data.status === 'failed') {
+        setResult((previous) => ({
+          ...previous,
+          status: 'failed',
+          result_code: data.result_code
+        }))
+
+        setNotice(
+          'Payment was not completed. You may retry after checking the transaction status.'
+        )
+
+        stopChecking()
+        return
+      }
+
+      setResult((previous) => ({
+        ...previous,
+        status: 'pending'
+      }))
+    } catch (err) {
+      console.error('Payment status check:', err.message)
+
+      if (
+        !mountedRef.current ||
+        !activeRef.current ||
+        requestId !== requestRef.current
+      ) {
+        return
+      }
+
+      setNotice(
+        'Unable to confirm payment status yet. Automatic checking will continue.'
+      )
+    }
+
+    if (checksRef.current >= MAX_CHECKS) {
+      setNotice(
+        'Automatic checking has paused. Payment is not confirmed. ' +
+        'Check the status before attempting another payment.'
+      )
+
+      stopChecking()
+      return
+    }
+
+    if (
+      activeRef.current &&
+      requestId === requestRef.current
+    ) {
+      timerRef.current = setTimeout(
+        () => checkPaymentStatus(id, requestId),
+        POLL_INTERVAL
+      )
+    }
+  }
+
+  const handlePayment = async (event) => {
+    event.preventDefault()
+
+    if (loading || checking) return
 
     setError('')
-    setResult(null)
+    setNotice('')
 
-    const normalizedPhone = phone.replace(/\D/g, '')
     const parsedCaseId = Number(caseId)
-    const parsedAmount = Number(amount)
+    const normalizedPhone = phone.replace(/\D/g, '')
 
-    // Validate phone number
+    if (
+      !selectedCase ||
+      selectedCase.status !== 'payment_pending' ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      setError('Please select a valid unpaid emergency case.')
+      return
+    }
+
+    if (
+      !Number.isSafeInteger(parsedCaseId) ||
+      parsedCaseId <= 0
+    ) {
+      setError('Please select a valid emergency case.')
+      return
+    }
+
     if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
       setError(
         'Enter a valid Safaricom number, e.g. 2547XXXXXXXX'
@@ -33,25 +287,7 @@ function PayNow() {
       return
     }
 
-    // Validate case ID
-    if (
-      !Number.isSafeInteger(parsedCaseId) ||
-      parsedCaseId <= 0
-    ) {
-      setError('Enter a valid emergency case ID')
-      return
-    }
-
-    // Validate amount
-    if (
-      !Number.isSafeInteger(parsedAmount) ||
-      parsedAmount <= 0
-    ) {
-      setError('Enter a valid payment amount')
-      return
-    }
-
-    const token = localStorage.getItem('medirescue_token')
+    const token = getToken()
 
     if (!token) {
       navigate('/login')
@@ -59,22 +295,30 @@ function PayNow() {
     }
 
     setLoading(true)
+    setResult(null)
 
     try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          case_id: parsedCaseId,
-          phone_number: normalizedPhone,
-          amount: parsedAmount
-        })
-      })
+      const response = await fetch(
+        `${API_URL}/mpesa/initiate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            case_id: parsedCaseId,
+            phone_number: normalizedPhone
+          })
+        }
+      )
 
       const data = await response.json()
+
+      if (response.status === 401) {
+        navigate('/login')
+        return
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -82,18 +326,67 @@ function PayNow() {
         )
       }
 
-      setResult(data)
+      if (!mountedRef.current) return
 
-    } catch (err) {
-      setError(
-        err.message || 'Payment request failed. Please try again.'
+      setResult({
+        ...data,
+        case_id: parsedCaseId,
+        status: 'pending'
+      })
+
+      setNotice(
+        'M-Pesa request submitted. Waiting for confirmation.'
       )
+
+      checksRef.current = 0
+      activeRef.current = true
+      requestRef.current += 1
+
+      const requestId = requestRef.current
+
+      setChecking(true)
+
+      timerRef.current = setTimeout(
+        () => checkPaymentStatus(parsedCaseId, requestId),
+        POLL_INTERVAL
+      )
+    } catch (err) {
+      if (mountedRef.current) {
+        setError(
+          err.message || 'Payment request failed.'
+        )
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
-  // Input styling
+  const handleCaseChange = (value) => {
+    stopChecking()
+    setCaseId(value)
+    setResult(null)
+    setNotice('')
+    setError('')
+  }
+
+  const handleManualCheck = () => {
+    if (!caseId || loading || checking) return
+
+    setError('')
+    setNotice('Checking the latest payment status...')
+
+    checksRef.current = 0
+    activeRef.current = true
+    requestRef.current += 1
+
+    const requestId = requestRef.current
+
+    setChecking(true)
+    checkPaymentStatus(Number(caseId), requestId)
+  }
+
   const inputStyle = {
     width: '100%',
     padding: '13px',
@@ -104,101 +397,173 @@ function PayNow() {
     boxSizing: 'border-box',
     backgroundColor: '#ffffff',
     color: '#17233b',
-    fontSize: '15px',
-    outlineColor: '#16a34a'
+    fontSize: '15px'
   }
 
   const labelStyle = {
     display: 'block',
     color: '#17233b',
     fontSize: '14px',
-    fontWeight: '600'
+    fontWeight: 600
   }
+
+  const paymentStatus = result?.status || 'pending'
+
+  const statusColors = {
+    completed: {
+      background: '#f0fdf4',
+      color: '#166534',
+      border: '1px solid #bbf7d0'
+    },
+    failed: {
+      background: '#fef2f2',
+      color: '#b91c1c',
+      border: '1px solid #fecaca'
+    },
+    pending: {
+      background: '#eff6ff',
+      color: '#1d4ed8',
+      border: '1px solid #bfdbfe'
+    }
+  }
+
+  const paymentDisabled =
+    loading ||
+    loadingCases ||
+    checking ||
+    !selectedCase ||
+    (result && paymentStatus !== 'failed')
 
   return (
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: '#f3f6fa',
+        background: '#f3f6fa',
         padding: '40px 20px',
-        color: '#17233b',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        color: '#17233b'
       }}
     >
       <main
         style={{
-          maxWidth: '500px',
+          maxWidth: '520px',
           margin: 'auto',
-          backgroundColor: '#ffffff',
+          background: '#ffffff',
           padding: '30px',
           borderRadius: '14px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.06)'
         }}
       >
-
-        {/* BACK BUTTON */}
         <button
           type="button"
           onClick={() => navigate('/patient-dashboard')}
           style={{
             border: 'none',
-            backgroundColor: 'transparent',
+            background: 'transparent',
             color: '#dc2626',
+            fontWeight: 600,
             cursor: 'pointer',
-            marginBottom: '22px',
-            fontWeight: '600',
-            fontSize: '14px',
-            padding: '0'
+            marginBottom: '24px'
           }}
         >
           ← Back to Dashboard
         </button>
 
-        {/* PAGE HEADING */}
-        <div style={{ textAlign: 'center' }}>
-          <h1
-            style={{
-              color: '#17233b',
-              fontSize: '29px',
-              marginBottom: '12px'
-            }}
-          >
+        <header style={{ textAlign: 'center' }}>
+          <h1 style={{ fontSize: '29px', marginBottom: '10px' }}>
             Pay with M-Pesa
           </h1>
 
           <p
             style={{
               color: '#64748b',
-              fontSize: '15px',
-              lineHeight: '1.6',
+              lineHeight: 1.6,
               marginBottom: '28px'
             }}
           >
             Pay for your MediRescue emergency service
             securely using M-Pesa.
           </p>
-        </div>
+        </header>
 
-        {/* PAYMENT FORM */}
         <form onSubmit={handlePayment}>
-
-          {/* CASE ID */}
           <label htmlFor="caseId" style={labelStyle}>
-            Emergency Case ID
+            Emergency Case
           </label>
 
-          <input
+          <select
             id="caseId"
-            type="number"
-            min="1"
-            required
             value={caseId}
-            onChange={(e) => setCaseId(e.target.value)}
-            placeholder="Enter your case ID"
+            onChange={(event) =>
+              handleCaseChange(event.target.value)
+            }
+            disabled={loadingCases || loading || checking}
+            required
             style={inputStyle}
-          />
+          >
+            <option value="">
+              {loadingCases
+                ? 'Loading emergency cases...'
+                : 'Select an emergency case'}
+            </option>
 
-          {/* PHONE NUMBER */}
+            {eligibleCases.map((item) => (
+              <option key={item.id} value={item.id}>
+                Case #{item.id} — {item.hospital_name}
+              </option>
+            ))}
+          </select>
+
+          {!loadingCases && eligibleCases.length === 0 && (
+            <p
+              style={{
+                color: '#64748b',
+                fontSize: '14px',
+                marginTop: '-10px',
+                marginBottom: '20px'
+              }}
+            >
+              No emergency cases currently require payment.
+            </p>
+          )}
+
+          {selectedCase && (
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '10px',
+                padding: '16px',
+                marginBottom: '22px'
+              }}
+            >
+              <div
+                style={{
+                  color: '#64748b',
+                  fontSize: '13px',
+                  marginBottom: '6px'
+                }}
+              >
+                Hospital
+              </div>
+
+              <strong>{selectedCase.hospital_name}</strong>
+
+              <div
+                style={{
+                  color: '#64748b',
+                  fontSize: '13px',
+                  marginTop: '15px',
+                  marginBottom: '6px'
+                }}
+              >
+                Emergency Status
+              </div>
+
+              <strong>Payment Pending</strong>
+            </div>
+          )}
+
           <label htmlFor="phone" style={labelStyle}>
             Safaricom Phone Number
           </label>
@@ -208,122 +573,185 @@ function PayNow() {
             type="tel"
             required
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(event) =>
+              setPhone(event.target.value)
+            }
+            disabled={loading || checking}
             placeholder="2547XXXXXXXX"
             style={inputStyle}
           />
 
-          {/* PAYMENT AMOUNT */}
           <label htmlFor="amount" style={labelStyle}>
             Amount (KSh)
           </label>
 
           <input
             id="amount"
-            type="number"
-            min="1"
-            step="1"
-            required
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="Enter payment amount"
-            style={inputStyle}
+            type="text"
+            value={
+              selectedCase
+                ? amount.toLocaleString('en-KE', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })
+                : ''
+            }
+            placeholder="Select a case to view amount"
+            readOnly
+            style={{
+              ...inputStyle,
+              background: '#f1f5f9',
+              fontWeight: 700,
+              cursor: 'not-allowed'
+            }}
           />
 
-          {/* ERROR MESSAGE */}
+          <p
+            style={{
+              color: '#64748b',
+              fontSize: '12px',
+              marginTop: '-12px',
+              marginBottom: '22px'
+            }}
+          >
+            Payment amount is determined by MediRescue
+            and cannot be edited.
+          </p>
+
           {error && (
             <div
               role="alert"
               style={{
-                backgroundColor: '#fef2f2',
+                background: '#fef2f2',
                 color: '#b91c1c',
                 border: '1px solid #fecaca',
-                padding: '14px',
                 borderRadius: '8px',
-                marginBottom: '18px',
-                fontSize: '14px'
+                padding: '14px',
+                marginBottom: '18px'
               }}
             >
               {error}
             </div>
           )}
 
-          {/* PAYMENT REQUEST RESULT */}
           {result && (
             <div
               role="status"
+              aria-live="polite"
               style={{
-                backgroundColor: '#f0fdf4',
-                color: '#166534',
-                border: '1px solid #bbf7d0',
+                ...statusColors[paymentStatus],
                 padding: '16px',
                 borderRadius: '8px',
-                marginBottom: '20px'
+                marginBottom: '20px',
+                textAlign: 'center'
               }}
             >
               <strong>
-                M-Pesa Request Submitted
+                {paymentStatus === 'completed'
+                  ? 'M-Pesa Payment Confirmed'
+                  : paymentStatus === 'failed'
+                    ? 'M-Pesa Payment Failed'
+                    : 'M-Pesa Request Submitted'}
               </strong>
 
-              <p style={{ marginTop: '10px' }}>
-                Case ID: {result.case_id}
-              </p>
+              <p>Case ID: {result.case_id}</p>
 
               <p>
-                Status: {result.status || 'pending'}
+                Status: <strong>{paymentStatus}</strong>
               </p>
 
               <p style={{ fontSize: '14px' }}>
-                Awaiting payment confirmation from Safaricom.
+                {notice}
               </p>
 
-              <small>
-                A submitted request does not mean payment
-                has been completed.
-              </small>
+              {checking && (
+                <p style={{ fontSize: '13px' }}>
+                  Checking payment status...
+                </p>
+              )}
+
+              {result.result_code != null &&
+                paymentStatus === 'failed' && (
+                  <p style={{ fontSize: '13px' }}>
+                    Safaricom result code: {result.result_code}
+                  </p>
+                )}
+
+              {paymentStatus === 'pending' && (
+                <small>
+                  A submitted request does not mean
+                  payment has been completed.
+                </small>
+              )}
             </div>
           )}
 
-          {/* PAY BUTTON */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={paymentDisabled}
             style={{
               width: '100%',
               padding: '15px',
-              backgroundColor: '#16a34a',
+              background: '#16a34a',
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
-              cursor: loading ? 'wait' : 'pointer',
-              opacity: loading ? 0.7 : 1,
+              fontWeight: 700,
               fontSize: '15px',
-              fontWeight: 'bold'
+              cursor: paymentDisabled
+                ? 'not-allowed'
+                : 'pointer',
+              opacity: paymentDisabled ? 0.6 : 1
             }}
           >
             {loading
               ? 'Sending M-Pesa Request...'
-              : 'Pay with M-Pesa'}
+              : checking
+                ? 'Checking Payment...'
+                : result?.status === 'completed'
+                  ? 'Payment Completed'
+                  : result?.status === 'pending'
+                    ? 'Awaiting Confirmation'
+                    : result?.status === 'failed'
+                      ? 'Retry M-Pesa Payment'
+                      : 'Pay with M-Pesa'}
           </button>
 
+          {result?.status === 'pending' && !checking && (
+            <button
+              type="button"
+              onClick={handleManualCheck}
+              style={{
+                width: '100%',
+                padding: '13px',
+                marginTop: '12px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                color: '#17233b',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Check Payment Status
+            </button>
+          )}
         </form>
 
-        {/* SANDBOX INFORMATION */}
         <p
           style={{
             fontSize: '12px',
             color: '#64748b',
             marginTop: '24px',
             textAlign: 'center',
-            lineHeight: '1.7'
+            lineHeight: 1.7
           }}
         >
-          MediRescue is currently using M-Pesa Sandbox.
+          MediRescue currently uses M-Pesa Sandbox.
           Transactions are simulated and do not transfer
           real money. Real phone prompts require approved
           production credentials.
         </p>
-
       </main>
     </div>
   )

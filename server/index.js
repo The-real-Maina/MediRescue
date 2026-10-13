@@ -36,6 +36,12 @@ app.use('/api/cases', require('./routes/caseRoutes'));
 // Ambulance management
 app.use('/api/ambulances', require('./routes/ambulanceRoutes'));
 
+// Hospital Pricing Management
+app.use(
+  '/api/hospital-pricing',
+  require('./routes/hospitalPricingRoutes')
+);
+
 // Super Admin
 app.use('/api/admin', require('./routes/adminRoutes'));
 

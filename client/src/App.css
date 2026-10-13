@@ -928,3 +928,48 @@ body:has(.hospital-management-page) {
 .hospital-management-page h2 {
   color: #17233b;
 }
+
+/* ==========================================
+   MEDIRESCUE HOMEPAGE FIXES
+   ========================================== */
+
+/* Prevent Vite's default root width restriction */
+#root {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+/* Homepage typography */
+#root > div header ~ section h2 {
+  color: #17233b;
+}
+
+/* Navigation links */
+header nav a {
+  color: #17233b !important;
+  text-decoration: none !important;
+  font-weight: 600;
+}
+
+header nav a:hover {
+  color: #dc2626 !important;
+}
+
+/* Keep registration button readable */
+header nav a[href="/register"] {
+  color: #ffffff !important;
+}
+
+/* Better spacing on small screens */
+@media (max-width: 700px) {
+  header nav {
+    gap: 12px !important;
+  }
+
+  header nav a {
+    font-size: 14px;
+  }
+}
