@@ -3,12 +3,10 @@ const pool = require('../config/db');
 
 // ==========================================
 // CREATE EMERGENCY CASE
-// AUTOMATICALLY SELECT NEAREST HOSPITAL
 // ==========================================
 
 exports.createCase = async (req, res) => {
   const patientId = req.user.id;
-
   const {
     emergency_type,
     emergency_desc,
@@ -17,7 +15,11 @@ exports.createCase = async (req, res) => {
     severity
   } = req.body;
 
-  if (!emergency_type || pickup_lat === undefined || pickup_lng === undefined) {
+  if (
+    !emergency_type ||
+    pickup_lat === undefined ||
+    pickup_lng === undefined
+  ) {
     return res.status(400).json({
       error: 'emergency_type, pickup_lat and pickup_lng are required'
     });
@@ -57,7 +59,8 @@ exports.createCase = async (req, res) => {
     const [hospitals] = await connection.query(`
       SELECT id, name, location, latitude, longitude
       FROM hospital
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      WHERE latitude IS NOT NULL
+        AND longitude IS NOT NULL
     `);
 
     if (hospitals.length === 0) {
@@ -86,7 +89,11 @@ exports.createCase = async (req, res) => {
         Math.cos(toRadians(hospitalLat)) *
         Math.sin(lngDifference / 2) ** 2;
 
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const c = 2 * Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1 - a)
+      );
+
       const distance = earthRadiusKm * c;
 
       if (distance < shortestDistance) {
@@ -110,8 +117,15 @@ exports.createCase = async (req, res) => {
 
     const [result] = await connection.query(`
       INSERT INTO \`case\` (
-        patient_id, hospital_id, emergency_desc, status,
-        severity, payment_amount, pickup_lat, pickup_lng, requested_at
+        patient_id,
+        hospital_id,
+        emergency_desc,
+        status,
+        severity,
+        payment_amount,
+        pickup_lat,
+        pickup_lng,
+        requested_at
       )
       VALUES (?, ?, ?, 'requested', ?, ?, ?, ?, NOW())
     `, [
@@ -147,9 +161,11 @@ exports.createCase = async (req, res) => {
       },
       distance_km: Number(shortestDistance.toFixed(2))
     });
+
   } catch (err) {
     if (connection) await connection.rollback();
     console.error('Create case error:', err);
+
     return res.status(500).json({
       error: 'Failed to create emergency case'
     });
@@ -166,8 +182,13 @@ exports.getMyCases = async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
-        c.id, c.emergency_desc, c.status, c.severity,
-        c.payment_amount, c.pickup_lat, c.pickup_lng,
+        c.id,
+        c.emergency_desc,
+        c.status,
+        c.severity,
+        c.payment_amount,
+        c.pickup_lat,
+        c.pickup_lng,
         c.requested_at,
         h.id AS hospital_id,
         h.name AS hospital_name,
@@ -179,8 +200,10 @@ exports.getMyCases = async (req, res) => {
     `, [req.user.id]);
 
     return res.status(200).json(rows);
+
   } catch (err) {
     console.error('Get patient cases error:', err);
+
     return res.status(500).json({
       error: 'Failed to retrieve patient cases'
     });
@@ -203,13 +226,20 @@ exports.getHospitalCases = async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
-        c.id, c.patient_id,
+        c.id,
+        c.patient_id,
         p.name AS patient_name,
         p.phone AS patient_phone,
-        c.emergency_desc, c.status, c.severity,
-        c.pickup_lat, c.pickup_lng,
-        c.requested_at, c.arrival_at, c.closed_at,
-        c.ambulance_id, c.staff_id
+        c.emergency_desc,
+        c.status,
+        c.severity,
+        c.pickup_lat,
+        c.pickup_lng,
+        c.requested_at,
+        c.arrival_at,
+        c.closed_at,
+        c.ambulance_id,
+        c.staff_id
       FROM \`case\` c
       JOIN patient p ON c.patient_id = p.id
       WHERE c.hospital_id = ?
@@ -217,8 +247,10 @@ exports.getHospitalCases = async (req, res) => {
     `, [hospitalId]);
 
     return res.status(200).json(rows);
+
   } catch (err) {
     console.error('Get hospital cases error:', err);
+
     return res.status(500).json({
       error: 'Failed to retrieve hospital cases'
     });
@@ -233,10 +265,17 @@ exports.updateCaseStatus = async (req, res) => {
   const caseId = Number(req.params.id);
   const staffId = req.user.id;
   const hospitalId = req.user.hospital_id;
-  const { status } = req.body || {};
+
+  // Normalize the incoming status.
+  const rawStatus = req.body?.status;
+  const status = typeof rawStatus === 'string'
+    ? rawStatus.trim()
+    : rawStatus;
 
   if (!Number.isSafeInteger(caseId) || caseId <= 0) {
-    return res.status(400).json({ error: 'Invalid case ID' });
+    return res.status(400).json({
+      error: 'Invalid case ID'
+    });
   }
 
   if (!hospitalId) {
@@ -245,6 +284,7 @@ exports.updateCaseStatus = async (req, res) => {
     });
   }
 
+  // Hospital staff cannot manually mark payment as paid.
   if (status === 'paid') {
     return res.status(403).json({
       error: 'Payment must be verified before marking a case as paid'
@@ -259,7 +299,9 @@ exports.updateCaseStatus = async (req, res) => {
 
   if (!allowedStatuses.includes(status)) {
     return res.status(400).json({
-      error: 'Invalid status for this endpoint'
+      error: 'Invalid status for this endpoint',
+      received_status: status ?? null,
+      allowed_statuses: allowedStatuses
     });
   }
 
@@ -284,6 +326,7 @@ exports.updateCaseStatus = async (req, res) => {
 
     if (cases.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'Case not found for this hospital'
       });
@@ -296,25 +339,48 @@ exports.updateCaseStatus = async (req, res) => {
       !staffTransitions[emergencyCase.status].includes(status)
     ) {
       await connection.rollback();
+
       return res.status(409).json({
         error: `Cannot change case status from ${emergencyCase.status} to ${status}`
       });
     }
 
+    // ==========================================
+    // PAYMENT INTEGRITY CHECK
+    // ==========================================
+
     if (status === 'closed') {
+      const allowSimulation =
+        process.env.NODE_ENV === 'development' &&
+        process.env.PAYMENT_SIMULATION_ENABLED === 'true';
+
+      const allowedPaymentModes = allowSimulation
+        ? ['mpesa', 'simulation']
+        : ['mpesa'];
+
+      const placeholders = allowedPaymentModes
+        .map(() => '?')
+        .join(', ');
+
       const [payments] = await connection.query(`
-        SELECT id
+        SELECT id, payment_mode
         FROM payment
         WHERE case_id = ?
           AND hospital_id = ?
           AND status = 'completed'
+          AND payment_mode IN (${placeholders})
         LIMIT 1
-      `, [caseId, hospitalId]);
+      `, [
+        caseId,
+        hospitalId,
+        ...allowedPaymentModes
+      ]);
 
       if (payments.length === 0) {
         await connection.rollback();
+
         return res.status(403).json({
-          error: 'No completed payment record exists for this case'
+          error: 'No eligible completed payment exists for this case'
         });
       }
     }
@@ -330,20 +396,33 @@ exports.updateCaseStatus = async (req, res) => {
           ELSE closed_at
         END
       WHERE id = ? AND hospital_id = ?
-    `, [status, staffId, status, caseId, hospitalId]);
+    `, [
+      status,
+      staffId,
+      status,
+      caseId,
+      hospitalId
+    ]);
 
     await connection.query(`
       INSERT INTO case_status_log
         (case_id, status, changed_by, changed_at)
       VALUES (?, ?, ?, NOW())
-    `, [caseId, status, staffId]);
+    `, [
+      caseId,
+      status,
+      staffId
+    ]);
 
     if (status === 'closed' && emergencyCase.ambulance_id) {
       await connection.query(`
         UPDATE ambulance
         SET status = 'available'
         WHERE id = ? AND hospital_id = ?
-      `, [emergencyCase.ambulance_id, hospitalId]);
+      `, [
+        emergencyCase.ambulance_id,
+        hospitalId
+      ]);
     }
 
     await connection.commit();
@@ -354,11 +433,14 @@ exports.updateCaseStatus = async (req, res) => {
       status,
       changed_by: staffId,
       ambulance_released:
-        status === 'closed' && Boolean(emergencyCase.ambulance_id)
+        status === 'closed' &&
+        Boolean(emergencyCase.ambulance_id)
     });
+
   } catch (err) {
     if (connection) await connection.rollback();
     console.error('Update case status error:', err);
+
     return res.status(500).json({
       error: 'Failed to update case status'
     });
@@ -378,7 +460,9 @@ exports.assignAmbulance = async (req, res) => {
   const { ambulance_id } = req.body || {};
 
   if (!Number.isSafeInteger(caseId) || caseId <= 0) {
-    return res.status(400).json({ error: 'Invalid case ID' });
+    return res.status(400).json({
+      error: 'Invalid case ID'
+    });
   }
 
   if (!ambulance_id) {
@@ -408,6 +492,7 @@ exports.assignAmbulance = async (req, res) => {
 
     if (cases.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'Case not found for this hospital'
       });
@@ -417,6 +502,7 @@ exports.assignAmbulance = async (req, res) => {
 
     if (emergencyCase.ambulance_id) {
       await connection.rollback();
+
       return res.status(400).json({
         error: 'This case already has an ambulance assigned'
       });
@@ -424,6 +510,7 @@ exports.assignAmbulance = async (req, res) => {
 
     if (!['requested', 'assigned'].includes(emergencyCase.status)) {
       await connection.rollback();
+
       return res.status(409).json({
         error: 'Ambulance cannot be assigned at this case stage'
       });
@@ -438,6 +525,7 @@ exports.assignAmbulance = async (req, res) => {
 
     if (ambulances.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'Ambulance not found for this hospital'
       });
@@ -447,6 +535,7 @@ exports.assignAmbulance = async (req, res) => {
 
     if (ambulance.status !== 'available') {
       await connection.rollback();
+
       return res.status(400).json({
         error: 'Ambulance is not available'
       });
@@ -454,18 +543,26 @@ exports.assignAmbulance = async (req, res) => {
 
     if (!ambulance.driver_id) {
       await connection.rollback();
+
       return res.status(409).json({
         error: 'Cannot dispatch an ambulance without an assigned driver'
       });
     }
 
     const [drivers] = await connection.query(`
-      SELECT id FROM staff
-      WHERE id = ? AND hospital_id = ? AND role = 'driver'
-    `, [ambulance.driver_id, hospitalId]);
+      SELECT id
+      FROM staff
+      WHERE id = ?
+        AND hospital_id = ?
+        AND role = 'driver'
+    `, [
+      ambulance.driver_id,
+      hospitalId
+    ]);
 
     if (drivers.length === 0) {
       await connection.rollback();
+
       return res.status(409).json({
         error: 'Invalid ambulance driver'
       });
@@ -473,21 +570,35 @@ exports.assignAmbulance = async (req, res) => {
 
     await connection.query(`
       UPDATE \`case\`
-      SET ambulance_id = ?, staff_id = ?, status = 'dispatched'
+      SET
+        ambulance_id = ?,
+        staff_id = ?,
+        status = 'dispatched'
       WHERE id = ? AND hospital_id = ?
-    `, [ambulance_id, staffId, caseId, hospitalId]);
+    `, [
+      ambulance_id,
+      staffId,
+      caseId,
+      hospitalId
+    ]);
 
     await connection.query(`
       UPDATE ambulance
       SET status = 'dispatched'
       WHERE id = ? AND hospital_id = ?
-    `, [ambulance_id, hospitalId]);
+    `, [
+      ambulance_id,
+      hospitalId
+    ]);
 
     await connection.query(`
       INSERT INTO case_status_log
         (case_id, status, changed_by, changed_at)
       VALUES (?, 'dispatched', ?, NOW())
-    `, [caseId, staffId]);
+    `, [
+      caseId,
+      staffId
+    ]);
 
     await connection.commit();
 
@@ -499,9 +610,11 @@ exports.assignAmbulance = async (req, res) => {
       driver_id: ambulance.driver_id,
       status: 'dispatched'
     });
+
   } catch (err) {
     if (connection) await connection.rollback();
     console.error('Assign ambulance error:', err);
+
     return res.status(500).json({
       error: 'Failed to assign ambulance'
     });
@@ -519,8 +632,10 @@ exports.getDriverAssignedCases = async (req, res) => {
   const hospitalId = Number(req.user.hospital_id);
 
   if (
-    !Number.isSafeInteger(driverId) || driverId <= 0 ||
-    !Number.isSafeInteger(hospitalId) || hospitalId <= 0
+    !Number.isSafeInteger(driverId) ||
+    driverId <= 0 ||
+    !Number.isSafeInteger(hospitalId) ||
+    hospitalId <= 0
   ) {
     return res.status(403).json({
       error: 'Invalid driver hospital assignment'
@@ -530,9 +645,14 @@ exports.getDriverAssignedCases = async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
-        c.id, c.emergency_desc, c.severity, c.status,
-        c.pickup_lat, c.pickup_lng,
-        c.requested_at, c.arrival_at,
+        c.id,
+        c.emergency_desc,
+        c.severity,
+        c.status,
+        c.pickup_lat,
+        c.pickup_lng,
+        c.requested_at,
+        c.arrival_at,
         c.ambulance_id,
         a.plate_number AS ambulance_plate,
         p.name AS patient_name,
@@ -549,8 +669,10 @@ exports.getDriverAssignedCases = async (req, res) => {
         ON s.id = a.driver_id
         AND s.hospital_id = a.hospital_id
         AND s.role = 'driver'
-      INNER JOIN patient p ON p.id = c.patient_id
-      INNER JOIN hospital h ON h.id = c.hospital_id
+      INNER JOIN patient p
+        ON p.id = c.patient_id
+      INNER JOIN hospital h
+        ON h.id = c.hospital_id
       WHERE a.driver_id = ?
         AND a.hospital_id = ?
         AND c.status IN (
@@ -559,11 +681,16 @@ exports.getDriverAssignedCases = async (req, res) => {
           'arrived_at_hospital'
         )
       ORDER BY c.requested_at DESC
-    `, [driverId, hospitalId]);
+    `, [
+      driverId,
+      hospitalId
+    ]);
 
     return res.status(200).json(rows);
+
   } catch (err) {
     console.error('Get driver assigned cases error:', err);
+
     return res.status(500).json({
       error: 'Failed to retrieve driver cases'
     });
@@ -580,12 +707,16 @@ exports.confirmDriverPickup = async (req, res) => {
   const hospitalId = Number(req.user.hospital_id);
 
   if (!Number.isSafeInteger(caseId) || caseId <= 0) {
-    return res.status(400).json({ error: 'Invalid case ID' });
+    return res.status(400).json({
+      error: 'Invalid case ID'
+    });
   }
 
   if (
-    !Number.isSafeInteger(driverId) || driverId <= 0 ||
-    !Number.isSafeInteger(hospitalId) || hospitalId <= 0
+    !Number.isSafeInteger(driverId) ||
+    driverId <= 0 ||
+    !Number.isSafeInteger(hospitalId) ||
+    hospitalId <= 0
   ) {
     return res.status(403).json({
       error: 'Invalid driver hospital assignment'
@@ -612,10 +743,15 @@ exports.confirmDriverPickup = async (req, res) => {
         AND c.hospital_id = ?
         AND a.driver_id = ?
       FOR UPDATE
-    `, [caseId, hospitalId, driverId]);
+    `, [
+      caseId,
+      hospitalId,
+      driverId
+    ]);
 
     if (cases.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'Case not assigned to this driver'
       });
@@ -623,6 +759,7 @@ exports.confirmDriverPickup = async (req, res) => {
 
     if (cases[0].status !== 'dispatched') {
       await connection.rollback();
+
       return res.status(409).json({
         error: 'Only dispatched cases can be marked picked_up'
       });
@@ -632,13 +769,19 @@ exports.confirmDriverPickup = async (req, res) => {
       UPDATE \`case\`
       SET status = 'picked_up'
       WHERE id = ? AND hospital_id = ?
-    `, [caseId, hospitalId]);
+    `, [
+      caseId,
+      hospitalId
+    ]);
 
     await connection.query(`
       INSERT INTO case_status_log
         (case_id, status, changed_by, changed_at)
       VALUES (?, 'picked_up', ?, NOW())
-    `, [caseId, driverId]);
+    `, [
+      caseId,
+      driverId
+    ]);
 
     await connection.commit();
 
@@ -647,9 +790,11 @@ exports.confirmDriverPickup = async (req, res) => {
       case_id: caseId,
       status: 'picked_up'
     });
+
   } catch (err) {
     if (connection) await connection.rollback();
     console.error('Confirm driver pickup error:', err);
+
     return res.status(500).json({
       error: 'Failed to confirm patient pickup'
     });
@@ -668,12 +813,16 @@ exports.confirmHospitalArrival = async (req, res) => {
   const hospitalId = Number(req.user.hospital_id);
 
   if (!Number.isSafeInteger(caseId) || caseId <= 0) {
-    return res.status(400).json({ error: 'Invalid case ID' });
+    return res.status(400).json({
+      error: 'Invalid case ID'
+    });
   }
 
   if (
-    !Number.isSafeInteger(driverId) || driverId <= 0 ||
-    !Number.isSafeInteger(hospitalId) || hospitalId <= 0
+    !Number.isSafeInteger(driverId) ||
+    driverId <= 0 ||
+    !Number.isSafeInteger(hospitalId) ||
+    hospitalId <= 0
   ) {
     return res.status(403).json({
       error: 'Invalid driver hospital assignment'
@@ -700,10 +849,15 @@ exports.confirmHospitalArrival = async (req, res) => {
         AND c.hospital_id = ?
         AND a.driver_id = ?
       FOR UPDATE
-    `, [caseId, hospitalId, driverId]);
+    `, [
+      caseId,
+      hospitalId,
+      driverId
+    ]);
 
     if (cases.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'Case not assigned to this driver'
       });
@@ -711,6 +865,7 @@ exports.confirmHospitalArrival = async (req, res) => {
 
     if (cases[0].status !== 'picked_up') {
       await connection.rollback();
+
       return res.status(409).json({
         error: 'Only picked_up cases can be marked arrived_at_hospital'
       });
@@ -718,16 +873,23 @@ exports.confirmHospitalArrival = async (req, res) => {
 
     await connection.query(`
       UPDATE \`case\`
-      SET status = 'arrived_at_hospital',
-          arrival_at = NOW()
+      SET
+        status = 'arrived_at_hospital',
+        arrival_at = NOW()
       WHERE id = ? AND hospital_id = ?
-    `, [caseId, hospitalId]);
+    `, [
+      caseId,
+      hospitalId
+    ]);
 
     await connection.query(`
       INSERT INTO case_status_log
         (case_id, status, changed_by, changed_at)
       VALUES (?, 'arrived_at_hospital', ?, NOW())
-    `, [caseId, driverId]);
+    `, [
+      caseId,
+      driverId
+    ]);
 
     await connection.commit();
 
@@ -736,9 +898,11 @@ exports.confirmHospitalArrival = async (req, res) => {
       case_id: caseId,
       status: 'arrived_at_hospital'
     });
+
   } catch (err) {
     if (connection) await connection.rollback();
     console.error('Confirm hospital arrival error:', err);
+
     return res.status(500).json({
       error: 'Failed to confirm hospital arrival'
     });
@@ -757,12 +921,16 @@ exports.confirmPatientHandover = async (req, res) => {
   const hospitalId = Number(req.user.hospital_id);
 
   if (!Number.isSafeInteger(caseId) || caseId <= 0) {
-    return res.status(400).json({ error: 'Invalid case ID' });
+    return res.status(400).json({
+      error: 'Invalid case ID'
+    });
   }
 
   if (
-    !Number.isSafeInteger(staffId) || staffId <= 0 ||
-    !Number.isSafeInteger(hospitalId) || hospitalId <= 0
+    !Number.isSafeInteger(staffId) ||
+    staffId <= 0 ||
+    !Number.isSafeInteger(hospitalId) ||
+    hospitalId <= 0
   ) {
     return res.status(403).json({
       error: 'Invalid hospital staff assignment'
@@ -780,10 +948,14 @@ exports.confirmPatientHandover = async (req, res) => {
       FROM \`case\`
       WHERE id = ? AND hospital_id = ?
       FOR UPDATE
-    `, [caseId, hospitalId]);
+    `, [
+      caseId,
+      hospitalId
+    ]);
 
     if (cases.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'Case not found for this hospital'
       });
@@ -791,6 +963,7 @@ exports.confirmPatientHandover = async (req, res) => {
 
     if (cases[0].status !== 'arrived_at_hospital') {
       await connection.rollback();
+
       return res.status(409).json({
         error: 'Patient handover requires confirmed hospital arrival'
       });
@@ -798,16 +971,24 @@ exports.confirmPatientHandover = async (req, res) => {
 
     await connection.query(`
       UPDATE \`case\`
-      SET status = 'handed_over',
-          staff_id = ?
+      SET
+        status = 'handed_over',
+        staff_id = ?
       WHERE id = ? AND hospital_id = ?
-    `, [staffId, caseId, hospitalId]);
+    `, [
+      staffId,
+      caseId,
+      hospitalId
+    ]);
 
     await connection.query(`
       INSERT INTO case_status_log
         (case_id, status, changed_by, changed_at)
       VALUES (?, 'handed_over', ?, NOW())
-    `, [caseId, staffId]);
+    `, [
+      caseId,
+      staffId
+    ]);
 
     await connection.commit();
 
@@ -816,9 +997,11 @@ exports.confirmPatientHandover = async (req, res) => {
       case_id: caseId,
       status: 'handed_over'
     });
+
   } catch (err) {
     if (connection) await connection.rollback();
     console.error('Confirm patient handover error:', err);
+
     return res.status(500).json({
       error: 'Failed to confirm patient handover'
     });
