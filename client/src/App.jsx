@@ -1,31 +1,13 @@
-
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate
-} from 'react-router-dom'
-
-// HOMEPAGE
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
-
-// AUTHENTICATION
 import Login from './pages/Login'
 import Register from './pages/Register'
-
-// PATIENT PAGES
 import PatientDashboard from './pages/PatientDashboard'
 import EmergencyRequest from './pages/EmergencyRequest'
 import MyCases from './pages/MyCases'
 import PayNow from './pages/PayNow'
-
-// HOSPITAL STAFF
 import StaffDashboard from './pages/StaffDashboard'
-
-// AMBULANCE DRIVER
 import DriverDashboard from './pages/DriverDashboard'
-
-// ADMIN PAGES
 import AdminDashboard from './pages/AdminDashboard'
 import HospitalManagement from './pages/HospitalManagement'
 import EmergencyMonitoring from './pages/EmergencyMonitoring'
@@ -33,199 +15,48 @@ import AmbulanceManagement from './pages/AmbulanceManagement'
 import StaffManagement from './pages/StaffManagement'
 import PatientManagement from './pages/PatientManagement'
 import PaymentManagement from './pages/PaymentManagement'
+import ProtectedRoute from './components/ProtectedRoute'
+import DashboardLayout from './layouts/DashboardLayout'
 
-import './App.css'
-
-// ==========================================
-// ROLE-BASED ROUTE PROTECTION
-// ==========================================
-
-function ProtectedRoute({ children, allowedRole }) {
-  const token = localStorage.getItem('medirescue_token')
-
-  let user = null
-
-  try {
-    user = JSON.parse(
-      localStorage.getItem('medirescue_user') || 'null'
-    )
-  } catch {
-    return <Navigate to="/login" replace />
-  }
-
-  if (!token || !user || user.role !== allowedRole) {
-    return <Navigate to="/login" replace />
-  }
-
-  return children
-}
-
-// ==========================================
-// APPLICATION ROUTES
-// ==========================================
-
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
-        {/* PUBLIC HOMEPAGE */}
-        <Route
-          path="/"
-          element={<Home />}
-        />
+        <Route element={<ProtectedRoute allowedRole="patient"><DashboardLayout /></ProtectedRoute>}>
+          <Route path="/patient-dashboard" element={<PatientDashboard />} />
+          <Route path="/emergency-request" element={<EmergencyRequest />} />
+          <Route path="/my-cases" element={<MyCases />} />
+          <Route path="/pay-now" element={<PayNow />} />
+        </Route>
 
-        {/* LOGIN */}
-        <Route
-          path="/login"
-          element={<Login />}
-        />
+        <Route element={<ProtectedRoute allowedRole="hospital_staff"><DashboardLayout /></ProtectedRoute>}>
+          <Route path="/staff-dashboard" element={<StaffDashboard view="dashboard" />} />
+          <Route path="/staff/tracking" element={<StaffDashboard view="tracking" />} />
+          <Route path="/staff/cases" element={<StaffDashboard view="cases" />} />
+          <Route path="/staff/history" element={<StaffDashboard view="history" />} />
+        </Route>
 
-        {/* REGISTRATION */}
-        <Route
-          path="/register"
-          element={<Register />}
-        />
+        <Route element={<ProtectedRoute allowedRole="driver"><DashboardLayout /></ProtectedRoute>}>
+          <Route path="/driver-dashboard" element={<DriverDashboard view="dashboard" />} />
+          <Route path="/driver/tracking" element={<DriverDashboard view="tracking" />} />
+          <Route path="/driver/ambulance" element={<DriverDashboard view="ambulance" />} />
+        </Route>
 
-        {/* PATIENT DASHBOARD */}
-        <Route
-          path="/patient-dashboard"
-          element={
-            <ProtectedRoute allowedRole="patient">
-              <PatientDashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* EMERGENCY REQUEST */}
-        <Route
-          path="/emergency-request"
-          element={
-            <ProtectedRoute allowedRole="patient">
-              <EmergencyRequest />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* PATIENT CASES */}
-        <Route
-          path="/my-cases"
-          element={
-            <ProtectedRoute allowedRole="patient">
-              <MyCases />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* M-PESA PAYMENT */}
-        <Route
-          path="/pay-now"
-          element={
-            <ProtectedRoute allowedRole="patient">
-              <PayNow />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* HOSPITAL STAFF DASHBOARD */}
-        <Route
-          path="/staff-dashboard"
-          element={
-            <ProtectedRoute allowedRole="hospital_staff">
-              <StaffDashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* AMBULANCE DRIVER DASHBOARD */}
-        <Route
-          path="/driver-dashboard"
-          element={
-            <ProtectedRoute allowedRole="driver">
-              <DriverDashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* SUPER ADMIN DASHBOARD */}
-        <Route
-          path="/admin-dashboard"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* HOSPITAL MANAGEMENT */}
-        <Route
-          path="/admin/hospitals"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <HospitalManagement />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* EMERGENCY CASE MONITORING */}
-        <Route
-          path="/admin/emergencies"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <EmergencyMonitoring />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* AMBULANCE MANAGEMENT */}
-        <Route
-          path="/admin/ambulances"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <AmbulanceManagement />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* STAFF MANAGEMENT */}
-        <Route
-          path="/admin/staff"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <StaffManagement />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* PATIENT MANAGEMENT */}
-        <Route
-          path="/admin/patients"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <PatientManagement />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* PAYMENT MANAGEMENT */}
-        <Route
-          path="/admin/payments"
-          element={
-            <ProtectedRoute allowedRole="super_admin">
-              <PaymentManagement />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* UNKNOWN ROUTES */}
-        <Route
-          path="*"
-          element={<Navigate to="/" replace />}
-        />
-
+        <Route element={<ProtectedRoute allowedRole="super_admin"><DashboardLayout /></ProtectedRoute>}>
+          <Route path="/admin-dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/hospitals" element={<HospitalManagement />} />
+          <Route path="/admin/emergencies" element={<EmergencyMonitoring />} />
+          <Route path="/admin/ambulances" element={<AmbulanceManagement />} />
+          <Route path="/admin/staff" element={<StaffManagement />} />
+          <Route path="/admin/patients" element={<PatientManagement />} />
+          <Route path="/admin/payments" element={<PaymentManagement />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )
 }
-
-export default App

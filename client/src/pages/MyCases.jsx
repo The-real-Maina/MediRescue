@@ -1,5 +1,326 @@
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+
+// ==========================================
+// MEDIRESCUE — MY EMERGENCY CASES
+// LIGHT MODE — INLINE CSS
+// ==========================================
+
+const styles = {
+  page: {
+    minHeight: '100vh',
+    background: '#f1f5f9',
+    color: '#17233b',
+    fontFamily: "'Segoe UI', Arial, sans-serif"
+  },
+
+  header: {
+    background: '#10243a',
+    borderBottom: '4px solid #dc2626',
+    padding: '18px 5%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 16
+  },
+
+  brand: {
+    color: '#ffffff',
+    fontSize: 25,
+    fontWeight: 800,
+    margin: 0
+  },
+
+  portal: {
+    color: '#cbd5e1',
+    fontSize: 10,
+    letterSpacing: 1.6,
+    marginTop: 5
+  },
+
+  headerButton: {
+    background: 'transparent',
+    color: '#ffffff',
+    border: '1px solid #64748b',
+    borderRadius: 8,
+    padding: '11px 17px',
+    fontWeight: 700,
+    cursor: 'pointer'
+  },
+
+  container: {
+    maxWidth: 1150,
+    margin: '0 auto',
+    padding: '42px 20px 65px'
+  },
+
+  backButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: 0,
+    marginBottom: 28
+  },
+
+  eyebrow: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 1.5,
+    marginBottom: 10
+  },
+
+  title: {
+    color: '#10243a',
+    fontSize: 'clamp(28px, 4vw, 38px)',
+    fontWeight: 800,
+    margin: '0 0 12px'
+  },
+
+  subtitle: {
+    color: '#64748b',
+    fontSize: 15,
+    lineHeight: 1.7,
+    margin: 0
+  },
+
+  summary: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 18,
+    background: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: 14,
+    padding: '22px 25px',
+    marginTop: 30,
+    marginBottom: 30,
+    boxShadow: '0 5px 20px rgba(15,23,42,0.04)'
+  },
+
+  summaryLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: 0.5
+  },
+
+  summaryNumber: {
+    color: '#10243a',
+    fontSize: 30,
+    fontWeight: 800,
+    marginTop: 5
+  },
+
+  redButton: {
+    background: '#dc2626',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 9,
+    padding: '13px 19px',
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer'
+  },
+
+  list: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 20
+  },
+
+  card: {
+    background: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: 15,
+    padding: 'clamp(20px, 4vw, 28px)',
+    boxShadow: '0 6px 22px rgba(15,23,42,0.05)'
+  },
+
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 15,
+    marginBottom: 20
+  },
+
+  caseNumber: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    display: 'block'
+  },
+
+  cardTitle: {
+    color: '#10243a',
+    fontSize: 21,
+    fontWeight: 800,
+    margin: 0
+  },
+
+  description: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 1.7,
+    margin: '0 0 22px'
+  },
+
+  divider: {
+    border: 'none',
+    height: 1,
+    background: '#e2e8f0',
+    margin: '0 0 22px'
+  },
+
+  details: {
+    display: 'grid',
+    gridTemplateColumns:
+      'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
+    gap: 22
+  },
+
+  detailLabel: {
+    display: 'block',
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8
+  },
+
+  detailValue: {
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: 700,
+    overflowWrap: 'anywhere'
+  },
+
+  message: {
+    background: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: 14,
+    padding: '35px 25px',
+    textAlign: 'center',
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 1.7
+  },
+
+  error: {
+    background: '#fee2e2',
+    color: '#991b1b',
+    border: '1px solid #fecaca',
+    borderRadius: 10,
+    padding: 18,
+    marginBottom: 25,
+    fontSize: 14,
+    lineHeight: 1.7
+  },
+
+  emptyIcon: {
+    width: 65,
+    height: 65,
+    borderRadius: 16,
+    background: '#e0f2fe',
+    color: '#0369a1',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: '0 auto 18px',
+    fontSize: 30,
+    fontWeight: 800
+  },
+
+  footer: {
+    color: '#94a3b8',
+    textAlign: 'center',
+    fontSize: 12,
+    marginTop: 45
+  }
+}
+
+// ==========================================
+// STATUS COLORS
+// ==========================================
+
+const statusStyles = {
+  requested: {
+    background: '#fef3c7',
+    color: '#92400e'
+  },
+  assigned: {
+    background: '#dbeafe',
+    color: '#1d4ed8'
+  },
+  dispatched: {
+    background: '#dbeafe',
+    color: '#1d4ed8'
+  },
+  picked_up: {
+    background: '#e0e7ff',
+    color: '#4338ca'
+  },
+  in_treatment: {
+    background: '#f3e8ff',
+    color: '#7e22ce'
+  },
+  payment_pending: {
+    background: '#ffedd5',
+    color: '#c2410c'
+  },
+  paid: {
+    background: '#dcfce7',
+    color: '#15803d'
+  },
+  closed: {
+    background: '#e2e8f0',
+    color: '#475569'
+  }
+}
+
+const severityStyles = {
+  low: {
+    background: '#dcfce7',
+    color: '#166534'
+  },
+  moderate: {
+    background: '#fef3c7',
+    color: '#92400e'
+  },
+  high: {
+    background: '#ffedd5',
+    color: '#c2410c'
+  },
+  critical: {
+    background: '#fee2e2',
+    color: '#b91c1c'
+  }
+}
+
+const badgeBase = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '8px 12px',
+  borderRadius: 20,
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.3
+}
+
+// ==========================================
+// MY CASES COMPONENT
+// ==========================================
 
 function MyCases() {
   const navigate = useNavigate()
@@ -29,16 +350,29 @@ function MyCases() {
 
         const data = await response.json()
 
+        if (response.status === 401) {
+          navigate('/login')
+          return
+        }
+
         if (!response.ok) {
           throw new Error(
             data.error || 'Failed to load emergency cases'
           )
         }
 
-        setCases(Array.isArray(data) ? data : data.cases || [])
+        setCases(
+          Array.isArray(data)
+            ? data
+            : Array.isArray(data.cases)
+              ? data.cases
+              : []
+        )
 
       } catch (err) {
-        setError(err.message)
+        setError(
+          err.message || 'Unable to load emergency cases.'
+        )
       } finally {
         setLoading(false)
       }
@@ -48,126 +382,257 @@ function MyCases() {
   }, [navigate])
 
   const formatStatus = (status) => {
-    return status
-      ?.replaceAll('_', ' ')
+    if (!status) return 'Unknown'
+
+    return String(status)
+      .replaceAll('_', ' ')
       .replace(/\b\w/g, (letter) => letter.toUpperCase())
   }
 
+  const getStatusStyle = (status) => ({
+    ...badgeBase,
+    ...(statusStyles[status] || {
+      background: '#e2e8f0',
+      color: '#334155'
+    })
+  })
+
+  const getSeverityStyle = (severity) => ({
+    ...badgeBase,
+    ...(severityStyles[severity] || {
+      background: '#f1f5f9',
+      color: '#475569'
+    })
+  })
+
   return (
-    <div className="cases-page">
-      <div className="cases-container">
+    <div style={styles.page}>
 
-        <button
-          className="back-dashboard"
-          onClick={() => navigate('/patient-dashboard')}
-        >
-          ← Back to Dashboard
-        </button>
+      {/* HEADER */}
+      <header style={styles.header}>
+        <div>
+          <h2 style={styles.brand}>
+            ✚ MediRescue
+          </h2>
 
-        <div className="cases-heading">
-          <p>MEDIRESCUE</p>
-          <h1>My Emergency Cases</h1>
-
-          <span>
-            Track your emergency requests and their current status.
-          </span>
+          <div style={styles.portal}>
+            PATIENT PORTAL • CASE TRACKING
+          </div>
         </div>
 
+        <button
+          type="button"
+          style={styles.headerButton}
+          onClick={() => navigate('/patient-dashboard')}
+        >
+          ← Dashboard
+        </button>
+      </header>
+
+      <main style={styles.container}>
+
+        {/* BACK BUTTON */}
+        <button
+          type="button"
+          style={styles.backButton}
+          onClick={() => navigate('/patient-dashboard')}
+        >
+          ← Back to Patient Dashboard
+        </button>
+
+        {/* PAGE INTRODUCTION */}
+        <section>
+          <p style={styles.eyebrow}>
+            MEDIRESCUE CASE MANAGEMENT
+          </p>
+
+          <h1 style={styles.title}>
+            My Emergency Cases
+          </h1>
+
+          <p style={styles.subtitle}>
+            Track your submitted emergency requests,
+            monitor their response status, and
+            review important case details.
+          </p>
+        </section>
+
+        {/* CASE SUMMARY */}
+        <section style={styles.summary}>
+          <div>
+            <span style={styles.summaryLabel}>
+              TOTAL EMERGENCY REQUESTS
+            </span>
+
+            <div style={styles.summaryNumber}>
+              {loading ? '—' : error ? '—' : cases.length}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            style={styles.redButton}
+            onClick={() => navigate('/emergency-request')}
+          >
+            + New Emergency Request
+          </button>
+        </section>
+
+        {/* LOADING */}
         {loading && (
-          <div className="cases-message">
-            Loading your emergency cases...
+          <div style={styles.message} role="status">
+            ⏳ Loading your emergency cases...
           </div>
         )}
 
-        {error && (
-          <div className="login-error">
-            {error}
+        {/* ERROR */}
+        {!loading && error && (
+          <div style={styles.error} role="alert">
+            <strong>Unable to load cases</strong>
+            <div>{error}</div>
           </div>
         )}
 
+        {/* EMPTY STATE */}
         {!loading && !error && cases.length === 0 && (
-          <div className="cases-empty">
-            <h3>No Emergency Cases</h3>
+          <div style={styles.message}>
+            <div style={styles.emptyIcon}>
+              ☷
+            </div>
 
-            <p>
-              You have not submitted any emergency requests yet.
+            <h3
+              style={{
+                color: '#10243a',
+                fontSize: 22,
+                margin: '0 0 12px'
+              }}
+            >
+              No Emergency Cases Yet
+            </h3>
+
+            <p
+              style={{
+                margin: '0 0 22px',
+                color: '#64748b'
+              }}
+            >
+              You have not submitted any emergency
+              requests yet. Your requests will appear
+              here once they have been created.
             </p>
 
             <button
+              type="button"
+              style={styles.redButton}
               onClick={() => navigate('/emergency-request')}
             >
-              Request Emergency Help
+              Request Emergency Help →
             </button>
           </div>
         )}
 
+        {/* CASE LIST */}
         {!loading && !error && cases.length > 0 && (
-          <div className="cases-list">
+          <section style={styles.list}>
 
-            {cases.map((caseItem) => (
-              <div
-                className="case-card"
-                key={caseItem.id}
-              >
-                <div className="case-card-header">
-                  <div>
-                    <span className="case-number">
-                      CASE #{caseItem.id}
-                    </span>
+            {cases.map((caseItem, index) => {
+              const caseId =
+                caseItem.id ?? caseItem.case_id ?? index + 1
 
-                    <h3>
-                      {caseItem.emergency_type ||
-                        'Emergency Request'}
-                    </h3>
-                  </div>
+              const hospitalName =
+                caseItem.hospital_name ||
+                (caseItem.hospital_id
+                  ? `Hospital ${caseItem.hospital_id}`
+                  : 'Not yet assigned')
 
-                  <span
-                    className={`case-status status-${caseItem.status}`}
-                  >
-                    {formatStatus(caseItem.status)}
-                  </span>
-                </div>
+              return (
+                <article
+                  key={caseId}
+                  style={styles.card}
+                >
 
-                <p className="case-description">
-                  {caseItem.emergency_desc ||
-                    'No description provided.'}
-                </p>
+                  {/* CASE HEADER */}
+                  <div style={styles.cardHeader}>
+                    <div>
+                      <span style={styles.caseNumber}>
+                        CASE #{caseId}
+                      </span>
 
-                <div className="case-details">
-                  <div>
-                    <span>Severity</span>
+                      <h3 style={styles.cardTitle}>
+                        {caseItem.emergency_type ||
+                          'Emergency Request'}
+                      </h3>
+                    </div>
 
-                    <strong>
-                      {caseItem.severity
-                        ? formatStatus(caseItem.severity)
-                        : 'Not specified'}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Hospital</span>
-
-                    <strong>
-                      {caseItem.hospital_name ||
-                        `Hospital ${caseItem.hospital_id}`}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Status</span>
-
-                    <strong>
+                    <span
+                      style={getStatusStyle(caseItem.status)}
+                    >
                       {formatStatus(caseItem.status)}
-                    </strong>
+                    </span>
                   </div>
-                </div>
-              </div>
-            ))}
 
-          </div>
+                  {/* DESCRIPTION */}
+                  <p style={styles.description}>
+                    {caseItem.emergency_desc ||
+                      'No emergency description provided.'}
+                  </p>
+
+                  <hr style={styles.divider} />
+
+                  {/* CASE DETAILS */}
+                  <div style={styles.details}>
+
+                    <div>
+                      <span style={styles.detailLabel}>
+                        Severity
+                      </span>
+
+                      <span
+                        style={getSeverityStyle(
+                          caseItem.severity
+                        )}
+                      >
+                        {caseItem.severity
+                          ? formatStatus(caseItem.severity)
+                          : 'Not specified'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={styles.detailLabel}>
+                        Assigned Hospital
+                      </span>
+
+                      <strong style={styles.detailValue}>
+                        {hospitalName}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span style={styles.detailLabel}>
+                        Current Status
+                      </span>
+
+                      <strong style={styles.detailValue}>
+                        {formatStatus(caseItem.status)}
+                      </strong>
+                    </div>
+
+                  </div>
+                </article>
+              )
+            })}
+
+          </section>
         )}
 
-      </div>
+        {/* FOOTER */}
+        <footer style={styles.footer}>
+          © {new Date().getFullYear()} MediRescue
+          {' '}• Emergency Medical Response System
+        </footer>
+
+      </main>
     </div>
   )
 }

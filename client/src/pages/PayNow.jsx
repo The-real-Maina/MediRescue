@@ -1,9 +1,342 @@
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+
+// ==========================================
+// MEDIRESCUE — M-PESA PAYMENT PORTAL
+// LIGHT MODE — INLINE CSS ONLY
+// ==========================================
 
 const API_URL = 'http://localhost:5000/api'
 const POLL_INTERVAL = 10000
 const MAX_CHECKS = 12
+
+const styles = {
+  page: {
+    minHeight: '100vh',
+    background: '#f1f5f9',
+    color: '#17233b',
+    fontFamily: "'Segoe UI', Arial, sans-serif"
+  },
+
+  header: {
+    background: '#10243a',
+    borderBottom: '4px solid #dc2626',
+    padding: '18px 5%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 16
+  },
+
+  brand: {
+    color: '#ffffff',
+    fontSize: 25,
+    fontWeight: 800,
+    margin: 0
+  },
+
+  portal: {
+    color: '#cbd5e1',
+    fontSize: 10,
+    letterSpacing: 1.6,
+    marginTop: 5
+  },
+
+  headerButton: {
+    background: 'transparent',
+    border: '1px solid #64748b',
+    color: '#ffffff',
+    borderRadius: 8,
+    padding: '11px 17px',
+    fontWeight: 700,
+    cursor: 'pointer'
+  },
+
+  container: {
+    maxWidth: 950,
+    margin: '0 auto',
+    padding: '40px 20px 65px'
+  },
+
+  backButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: 0,
+    marginBottom: 28
+  },
+
+  eyebrow: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 1.5,
+    marginBottom: 10
+  },
+
+  title: {
+    color: '#10243a',
+    fontSize: 'clamp(28px, 4vw, 38px)',
+    fontWeight: 800,
+    margin: '0 0 12px'
+  },
+
+  subtitle: {
+    color: '#64748b',
+    fontSize: 15,
+    lineHeight: 1.7,
+    margin: 0
+  },
+
+  notice: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+    background: '#ecfdf5',
+    border: '1px solid #bbf7d0',
+    borderLeft: '5px solid #16a34a',
+    borderRadius: 13,
+    padding: '20px 23px',
+    margin: '30px 0'
+  },
+
+  noticeIcon: {
+    width: 46,
+    height: 46,
+    background: '#dcfce7',
+    color: '#15803d',
+    borderRadius: 12,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 18,
+    fontWeight: 800
+  },
+
+  noticeTitle: {
+    color: '#166534',
+    fontSize: 17,
+    fontWeight: 800,
+    margin: '0 0 7px'
+  },
+
+  noticeText: {
+    color: '#166534',
+    fontSize: 13,
+    lineHeight: 1.7,
+    margin: 0
+  },
+
+  card: {
+    background: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: 16,
+    padding: 'clamp(20px, 4vw, 36px)',
+    boxShadow: '0 8px 28px rgba(15,23,42,0.05)'
+  },
+
+  sectionTitle: {
+    color: '#10243a',
+    fontSize: 20,
+    fontWeight: 800,
+    margin: '0 0 8px'
+  },
+
+  sectionDescription: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 1.7,
+    margin: '0 0 26px'
+  },
+
+  divider: {
+    border: 'none',
+    height: 1,
+    background: '#e2e8f0',
+    margin: '30px 0'
+  },
+
+  formGroup: {
+    marginBottom: 23
+  },
+
+  label: {
+    display: 'block',
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: 700,
+    marginBottom: 9
+  },
+
+  input: {
+    display: 'block',
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '13px 14px',
+    border: '1px solid #cbd5e1',
+    borderRadius: 9,
+    background: '#ffffff',
+    color: '#17233b',
+    fontFamily: 'inherit',
+    fontSize: 14,
+    outlineColor: '#16a34a'
+  },
+
+  helpText: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 1.7,
+    margin: '9px 0 0'
+  },
+
+  caseInfo: {
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 25
+  },
+
+  detailLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    display: 'block',
+    marginBottom: 7
+  },
+
+  detailValue: {
+    color: '#10243a',
+    fontSize: 15,
+    fontWeight: 800
+  },
+
+  amountBox: {
+    background: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: 12,
+    padding: '20px 22px',
+    marginBottom: 25
+  },
+
+  amountLabel: {
+    color: '#166534',
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 0.7
+  },
+
+  amountValue: {
+    color: '#166534',
+    fontSize: 'clamp(26px, 4vw, 34px)',
+    fontWeight: 800,
+    margin: '8px 0'
+  },
+
+  error: {
+    background: '#fef2f2',
+    color: '#991b1b',
+    border: '1px solid #fecaca',
+    borderRadius: 10,
+    padding: 16,
+    fontSize: 14,
+    lineHeight: 1.7,
+    marginBottom: 22
+  },
+
+  statusBox: {
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 24,
+    lineHeight: 1.7
+  },
+
+  payButton: {
+    width: '100%',
+    padding: '16px 20px',
+    background: '#16a34a',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 10,
+    fontSize: 15,
+    fontWeight: 800,
+    cursor: 'pointer'
+  },
+
+  checkButton: {
+    width: '100%',
+    padding: '14px 20px',
+    marginTop: 13,
+    background: '#ffffff',
+    color: '#10243a',
+    border: '1px solid #cbd5e1',
+    borderRadius: 9,
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer'
+  },
+
+  empty: {
+    background: '#f8fafc',
+    border: '1px dashed #cbd5e1',
+    borderRadius: 10,
+    padding: '18px 20px',
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 1.7,
+    marginBottom: 22
+  },
+
+  sandbox: {
+    background: '#eff6ff',
+    border: '1px solid #bfdbfe',
+    borderRadius: 12,
+    padding: '18px 20px',
+    marginTop: 28,
+    color: '#1e40af',
+    fontSize: 13,
+    lineHeight: 1.8
+  },
+
+  footer: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 35
+  }
+}
+
+const statusColors = {
+  completed: {
+    background: '#f0fdf4',
+    color: '#166534',
+    border: '1px solid #bbf7d0'
+  },
+
+  failed: {
+    background: '#fef2f2',
+    color: '#b91c1c',
+    border: '1px solid #fecaca'
+  },
+
+  pending: {
+    background: '#eff6ff',
+    color: '#1d4ed8',
+    border: '1px solid #bfdbfe'
+  }
+}
+
+// ==========================================
+// PAYMENT COMPONENT
+// ==========================================
 
 function PayNow() {
   const navigate = useNavigate()
@@ -24,14 +357,14 @@ function PayNow() {
   const checksRef = useRef(0)
   const mountedRef = useRef(false)
 
-  const selectedCase = cases.find(
-    (item) => String(item.id) === String(caseId)
-  )
-
   const eligibleCases = cases.filter(
     (item) =>
       item.status === 'payment_pending' &&
       Number(item.payment_amount) > 0
+  )
+
+  const selectedCase = eligibleCases.find(
+    (item) => String(item.id) === String(caseId)
   )
 
   const amount = selectedCase
@@ -40,6 +373,16 @@ function PayNow() {
 
   const getToken = () =>
     localStorage.getItem('medirescue_token')
+
+  const formatAmount = (value) =>
+    Number(value).toLocaleString('en-KE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+
+  // ==========================================
+  // STOP PAYMENT STATUS CHECKING
+  // ==========================================
 
   const stopChecking = useCallback(() => {
     activeRef.current = false
@@ -55,6 +398,10 @@ function PayNow() {
     }
   }, [])
 
+  // ==========================================
+  // LOAD PATIENT CASES
+  // ==========================================
+
   const loadCases = useCallback(async () => {
     const token = getToken()
 
@@ -66,13 +413,19 @@ function PayNow() {
     setLoadingCases(true)
 
     try {
-      const response = await fetch(`${API_URL}/cases`, {
-        headers: {
-          Authorization: `Bearer ${token}`
+      const response = await fetch(
+        `${API_URL}/cases`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
-      })
+      )
 
-      if (response.status === 401 || response.status === 403) {
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
         navigate('/login')
         return
       }
@@ -86,7 +439,9 @@ function PayNow() {
       }
 
       if (!Array.isArray(data)) {
-        throw new Error('Unexpected response from cases API')
+        throw new Error(
+          'Unexpected response from cases API'
+        )
       }
 
       if (!mountedRef.current) return
@@ -100,15 +455,20 @@ function PayNow() {
       )
 
       setCaseId((previous) =>
-        eligible.some((item) => String(item.id) === previous)
+        eligible.some(
+          (item) => String(item.id) === previous
+        )
           ? previous
           : eligible.length === 1
             ? String(eligible[0].id)
             : ''
       )
+
     } catch (err) {
       if (mountedRef.current) {
-        setError(err.message || 'Failed to load cases')
+        setError(
+          err.message || 'Failed to load cases'
+        )
       }
     } finally {
       if (mountedRef.current) {
@@ -131,6 +491,10 @@ function PayNow() {
       }
     }
   }, [loadCases])
+
+  // ==========================================
+  // CHECK M-PESA PAYMENT STATUS
+  // ==========================================
 
   const checkPaymentStatus = async (id, requestId) => {
     if (
@@ -189,7 +553,10 @@ function PayNow() {
           result_code: data.result_code
         }))
 
-        setNotice('Payment confirmed by the backend.')
+        setNotice(
+          'Payment confirmed by the backend.'
+        )
+
         stopChecking()
         await loadCases()
         return
@@ -214,8 +581,12 @@ function PayNow() {
         ...previous,
         status: 'pending'
       }))
+
     } catch (err) {
-      console.error('Payment status check:', err.message)
+      console.error(
+        'Payment status check:',
+        err.message
+      )
 
       if (
         !mountedRef.current ||
@@ -251,6 +622,10 @@ function PayNow() {
     }
   }
 
+  // ==========================================
+  // INITIATE M-PESA PAYMENT
+  // ==========================================
+
   const handlePayment = async (event) => {
     event.preventDefault()
 
@@ -268,7 +643,9 @@ function PayNow() {
       !Number.isFinite(amount) ||
       amount <= 0
     ) {
-      setError('Please select a valid unpaid emergency case.')
+      setError(
+        'Please select a valid unpaid emergency case.'
+      )
       return
     }
 
@@ -276,7 +653,9 @@ function PayNow() {
       !Number.isSafeInteger(parsedCaseId) ||
       parsedCaseId <= 0
     ) {
-      setError('Please select a valid emergency case.')
+      setError(
+        'Please select a valid emergency case.'
+      )
       return
     }
 
@@ -350,6 +729,7 @@ function PayNow() {
         () => checkPaymentStatus(parsedCaseId, requestId),
         POLL_INTERVAL
       )
+
     } catch (err) {
       if (mountedRef.current) {
         setError(
@@ -363,6 +743,10 @@ function PayNow() {
     }
   }
 
+  // ==========================================
+  // CASE SELECTION
+  // ==========================================
+
   const handleCaseChange = (value) => {
     stopChecking()
     setCaseId(value)
@@ -371,11 +755,17 @@ function PayNow() {
     setError('')
   }
 
+  // ==========================================
+  // MANUAL STATUS CHECK
+  // ==========================================
+
   const handleManualCheck = () => {
     if (!caseId || loading || checking) return
 
     setError('')
-    setNotice('Checking the latest payment status...')
+    setNotice(
+      'Checking the latest payment status...'
+    )
 
     checksRef.current = 0
     activeRef.current = true
@@ -384,48 +774,11 @@ function PayNow() {
     const requestId = requestRef.current
 
     setChecking(true)
+
     checkPaymentStatus(Number(caseId), requestId)
   }
 
-  const inputStyle = {
-    width: '100%',
-    padding: '13px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '8px',
-    marginTop: '8px',
-    marginBottom: '20px',
-    boxSizing: 'border-box',
-    backgroundColor: '#ffffff',
-    color: '#17233b',
-    fontSize: '15px'
-  }
-
-  const labelStyle = {
-    display: 'block',
-    color: '#17233b',
-    fontSize: '14px',
-    fontWeight: 600
-  }
-
   const paymentStatus = result?.status || 'pending'
-
-  const statusColors = {
-    completed: {
-      background: '#f0fdf4',
-      color: '#166534',
-      border: '1px solid #bbf7d0'
-    },
-    failed: {
-      background: '#fef2f2',
-      color: '#b91c1c',
-      border: '1px solid #fecaca'
-    },
-    pending: {
-      background: '#eff6ff',
-      color: '#1d4ed8',
-      border: '1px solid #bfdbfe'
-    }
-  }
 
   const paymentDisabled =
     loading ||
@@ -434,324 +787,404 @@ function PayNow() {
     !selectedCase ||
     (result && paymentStatus !== 'failed')
 
+  // ==========================================
+  // PAGE INTERFACE
+  // ==========================================
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#f3f6fa',
-        padding: '40px 20px',
-        boxSizing: 'border-box',
-        color: '#17233b'
-      }}
-    >
-      <main
-        style={{
-          maxWidth: '520px',
-          margin: 'auto',
-          background: '#ffffff',
-          padding: '30px',
-          borderRadius: '14px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.06)'
-        }}
-      >
+    <div style={styles.page}>
+
+      {/* HEADER */}
+      <header style={styles.header}>
+        <div>
+          <h2 style={styles.brand}>
+            ✚ MediRescue
+          </h2>
+
+          <div style={styles.portal}>
+            PATIENT PORTAL • M-PESA PAYMENTS
+          </div>
+        </div>
+
         <button
           type="button"
-          onClick={() => navigate('/patient-dashboard')}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            color: '#dc2626',
-            fontWeight: 600,
-            cursor: 'pointer',
-            marginBottom: '24px'
-          }}
+          style={styles.headerButton}
+          onClick={() =>
+            navigate('/patient-dashboard')
+          }
         >
-          ← Back to Dashboard
+          ← Dashboard
+        </button>
+      </header>
+
+      <main style={styles.container}>
+
+        {/* BACK BUTTON */}
+        <button
+          type="button"
+          style={styles.backButton}
+          onClick={() =>
+            navigate('/patient-dashboard')
+          }
+        >
+          ← Back to Patient Dashboard
         </button>
 
-        <header style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: '29px', marginBottom: '10px' }}>
+        {/* PAGE HEADING */}
+        <section>
+          <p style={styles.eyebrow}>
+            MEDIRESCUE PAYMENT SERVICES
+          </p>
+
+          <h1 style={styles.title}>
             Pay with M-Pesa
           </h1>
 
-          <p
-            style={{
-              color: '#64748b',
-              lineHeight: 1.6,
-              marginBottom: '28px'
-            }}
-          >
-            Pay for your MediRescue emergency service
-            securely using M-Pesa.
+          <p style={styles.subtitle}>
+            Manage payments for your emergency
+            medical services securely using M-Pesa.
+            Select an eligible case to get started.
           </p>
-        </header>
+        </section>
 
-        <form onSubmit={handlePayment}>
-          <label htmlFor="caseId" style={labelStyle}>
-            Emergency Case
-          </label>
+        {/* PAYMENT INFORMATION */}
+        <section style={styles.notice}>
+          <div style={styles.noticeIcon}>
+            KSh
+          </div>
 
-          <select
-            id="caseId"
-            value={caseId}
-            onChange={(event) =>
-              handleCaseChange(event.target.value)
-            }
-            disabled={loadingCases || loading || checking}
-            required
-            style={inputStyle}
-          >
-            <option value="">
-              {loadingCases
-                ? 'Loading emergency cases...'
-                : 'Select an emergency case'}
-            </option>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <h3 style={styles.noticeTitle}>
+              M-Pesa Payment
+            </h3>
 
-            {eligibleCases.map((item) => (
-              <option key={item.id} value={item.id}>
-                Case #{item.id} — {item.hospital_name}
-              </option>
-            ))}
-          </select>
-
-          {!loadingCases && eligibleCases.length === 0 && (
-            <p
-              style={{
-                color: '#64748b',
-                fontSize: '14px',
-                marginTop: '-10px',
-                marginBottom: '20px'
-              }}
-            >
-              No emergency cases currently require payment.
+            <p style={styles.noticeText}>
+              Select your emergency case and enter
+              your Safaricom phone number.
+              The system will submit a payment request
+              and check its confirmation status.
+              Emergency assistance does not require
+              advance payment.
             </p>
-          )}
+          </div>
+        </section>
 
-          {selectedCase && (
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '10px',
-                padding: '16px',
-                marginBottom: '22px'
-              }}
-            >
-              <div
-                style={{
-                  color: '#64748b',
-                  fontSize: '13px',
-                  marginBottom: '6px'
-                }}
+        {/* PAYMENT FORM */}
+        <section style={styles.card}>
+          <form onSubmit={handlePayment}>
+
+            <h2 style={styles.sectionTitle}>
+              01. Select Emergency Case
+            </h2>
+
+            <p style={styles.sectionDescription}>
+              Only emergency cases with an outstanding
+              payment amount are available for selection.
+            </p>
+
+            <div style={styles.formGroup}>
+              <label
+                htmlFor="caseId"
+                style={styles.label}
               >
-                Hospital
-              </div>
+                Emergency Case
+              </label>
 
-              <strong>{selectedCase.hospital_name}</strong>
-
-              <div
-                style={{
-                  color: '#64748b',
-                  fontSize: '13px',
-                  marginTop: '15px',
-                  marginBottom: '6px'
-                }}
+              <select
+                id="caseId"
+                value={caseId}
+                onChange={(event) =>
+                  handleCaseChange(event.target.value)
+                }
+                disabled={
+                  loadingCases || loading || checking
+                }
+                required
+                style={styles.input}
               >
-                Emergency Status
-              </div>
+                <option value="">
+                  {loadingCases
+                    ? 'Loading emergency cases...'
+                    : 'Select an emergency case'}
+                </option>
 
-              <strong>Payment Pending</strong>
+                {eligibleCases.map((item) => (
+                  <option
+                    key={item.id}
+                    value={item.id}
+                  >
+                    Case #{item.id} —{' '}
+                    {item.hospital_name ||
+                      'Assigned Hospital'}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
 
-          <label htmlFor="phone" style={labelStyle}>
-            Safaricom Phone Number
-          </label>
-
-          <input
-            id="phone"
-            type="tel"
-            required
-            value={phone}
-            onChange={(event) =>
-              setPhone(event.target.value)
-            }
-            disabled={loading || checking}
-            placeholder="2547XXXXXXXX"
-            style={inputStyle}
-          />
-
-          <label htmlFor="amount" style={labelStyle}>
-            Amount (KSh)
-          </label>
-
-          <input
-            id="amount"
-            type="text"
-            value={
-              selectedCase
-                ? amount.toLocaleString('en-KE', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })
-                : ''
-            }
-            placeholder="Select a case to view amount"
-            readOnly
-            style={{
-              ...inputStyle,
-              background: '#f1f5f9',
-              fontWeight: 700,
-              cursor: 'not-allowed'
-            }}
-          />
-
-          <p
-            style={{
-              color: '#64748b',
-              fontSize: '12px',
-              marginTop: '-12px',
-              marginBottom: '22px'
-            }}
-          >
-            Payment amount is determined by MediRescue
-            and cannot be edited.
-          </p>
-
-          {error && (
-            <div
-              role="alert"
-              style={{
-                background: '#fef2f2',
-                color: '#b91c1c',
-                border: '1px solid #fecaca',
-                borderRadius: '8px',
-                padding: '14px',
-                marginBottom: '18px'
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          {result && (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                ...statusColors[paymentStatus],
-                padding: '16px',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                textAlign: 'center'
-              }}
-            >
-              <strong>
-                {paymentStatus === 'completed'
-                  ? 'M-Pesa Payment Confirmed'
-                  : paymentStatus === 'failed'
-                    ? 'M-Pesa Payment Failed'
-                    : 'M-Pesa Request Submitted'}
-              </strong>
-
-              <p>Case ID: {result.case_id}</p>
-
-              <p>
-                Status: <strong>{paymentStatus}</strong>
-              </p>
-
-              <p style={{ fontSize: '14px' }}>
-                {notice}
-              </p>
-
-              {checking && (
-                <p style={{ fontSize: '13px' }}>
-                  Checking payment status...
-                </p>
+            {!loadingCases &&
+              eligibleCases.length === 0 && (
+                <div style={styles.empty}>
+                  No emergency cases currently require
+                  payment. If you recently submitted
+                  an emergency request, check your
+                  case status before making a payment.
+                </div>
               )}
 
-              {result.result_code != null &&
-                paymentStatus === 'failed' && (
-                  <p style={{ fontSize: '13px' }}>
-                    Safaricom result code: {result.result_code}
+            {selectedCase && (
+              <div style={styles.caseInfo}>
+                <div style={{ marginBottom: 18 }}>
+                  <span style={styles.detailLabel}>
+                    Emergency Case
+                  </span>
+                  <strong style={styles.detailValue}>
+                    Case #{selectedCase.id}
+                  </strong>
+                </div>
+
+                <div style={{ marginBottom: 18 }}>
+                  <span style={styles.detailLabel}>
+                    Assigned Hospital
+                  </span>
+                  <strong style={styles.detailValue}>
+                    {selectedCase.hospital_name ||
+                      'Hospital information unavailable'}
+                  </strong>
+                </div>
+
+                <div>
+                  <span style={styles.detailLabel}>
+                    Payment Status
+                  </span>
+                  <strong
+                    style={{
+                      ...styles.detailValue,
+                      color: '#c2410c'
+                    }}
+                  >
+                    Payment Pending
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            <hr style={styles.divider} />
+
+            <h2 style={styles.sectionTitle}>
+              02. Payment Details
+            </h2>
+
+            <p style={styles.sectionDescription}>
+              Enter the Safaricom number associated
+              with the M-Pesa account you wish to use.
+            </p>
+
+            <div style={styles.formGroup}>
+              <label
+                htmlFor="phone"
+                style={styles.label}
+              >
+                Safaricom Phone Number
+              </label>
+
+              <input
+                id="phone"
+                type="tel"
+                required
+                value={phone}
+                onChange={(event) =>
+                  setPhone(event.target.value)
+                }
+                disabled={loading || checking}
+                placeholder="2547XXXXXXXX"
+                style={styles.input}
+              />
+
+              <p style={styles.helpText}>
+                Enter the number in international
+                format, for example 2547XXXXXXXX.
+              </p>
+            </div>
+
+            <div style={styles.amountBox}>
+              <span style={styles.amountLabel}>
+                TOTAL PAYMENT AMOUNT
+              </span>
+
+              <div style={styles.amountValue}>
+                {selectedCase
+                  ? `KSh ${formatAmount(amount)}`
+                  : 'KSh —'}
+              </div>
+
+              <p
+                style={{
+                  ...styles.helpText,
+                  color: '#166534'
+                }}
+              >
+                The payment amount is determined
+                by MediRescue and cannot be edited.
+              </p>
+            </div>
+
+            <hr style={styles.divider} />
+
+            <h2 style={styles.sectionTitle}>
+              03. Confirm Payment
+            </h2>
+
+            <p style={styles.sectionDescription}>
+              Review your selected case, phone number,
+              and amount before submitting the request.
+            </p>
+
+            {error && (
+              <div style={styles.error} role="alert">
+                <strong>Payment Error</strong>
+                <div>{error}</div>
+              </div>
+            )}
+
+            {result && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  ...styles.statusBox,
+                  ...statusColors[paymentStatus]
+                }}
+              >
+                <h3
+                  style={{
+                    margin: '0 0 12px',
+                    fontSize: 18
+                  }}
+                >
+                  {paymentStatus === 'completed'
+                    ? '✓ M-Pesa Payment Confirmed'
+                    : paymentStatus === 'failed'
+                      ? '✕ M-Pesa Payment Failed'
+                      : '⏳ M-Pesa Request Submitted'}
+                </h3>
+
+                <p style={{ margin: '0 0 6px' }}>
+                  Case ID:{' '}
+                  <strong>{result.case_id}</strong>
+                </p>
+
+                <p style={{ margin: '0 0 6px' }}>
+                  Status:{' '}
+                  <strong>
+                    {paymentStatus.toUpperCase()}
+                  </strong>
+                </p>
+
+                {notice && (
+                  <p
+                    style={{
+                      fontSize: 13,
+                      margin: '12px 0 0'
+                    }}
+                  >
+                    {notice}
                   </p>
                 )}
 
-              {paymentStatus === 'pending' && (
-                <small>
-                  A submitted request does not mean
-                  payment has been completed.
-                </small>
-              )}
-            </div>
-          )}
+                {checking && (
+                  <p
+                    style={{
+                      fontSize: 13,
+                      margin: '12px 0 0'
+                    }}
+                  >
+                    Checking payment status...
+                  </p>
+                )}
 
-          <button
-            type="submit"
-            disabled={paymentDisabled}
-            style={{
-              width: '100%',
-              padding: '15px',
-              background: '#16a34a',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: 700,
-              fontSize: '15px',
-              cursor: paymentDisabled
-                ? 'not-allowed'
-                : 'pointer',
-              opacity: paymentDisabled ? 0.6 : 1
-            }}
-          >
-            {loading
-              ? 'Sending M-Pesa Request...'
-              : checking
-                ? 'Checking Payment...'
-                : result?.status === 'completed'
-                  ? 'Payment Completed'
-                  : result?.status === 'pending'
-                    ? 'Awaiting Confirmation'
-                    : result?.status === 'failed'
-                      ? 'Retry M-Pesa Payment'
-                      : 'Pay with M-Pesa'}
-          </button>
+                {result.result_code != null &&
+                  paymentStatus === 'failed' && (
+                    <p
+                      style={{
+                        fontSize: 13,
+                        margin: '12px 0 0'
+                      }}
+                    >
+                      Safaricom result code:{' '}
+                      {result.result_code}
+                    </p>
+                  )}
 
-          {result?.status === 'pending' && !checking && (
+                {paymentStatus === 'pending' && (
+                  <p
+                    style={{
+                      fontSize: 12,
+                      margin: '14px 0 0'
+                    }}
+                  >
+                    A submitted payment request
+                    does not mean payment has
+                    been completed.
+                  </p>
+                )}
+              </div>
+            )}
+
             <button
-              type="button"
-              onClick={handleManualCheck}
+              type="submit"
+              disabled={paymentDisabled}
               style={{
-                width: '100%',
-                padding: '13px',
-                marginTop: '12px',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                color: '#17233b',
-                fontWeight: 600,
-                cursor: 'pointer'
+                ...styles.payButton,
+                opacity: paymentDisabled ? 0.6 : 1,
+                cursor: paymentDisabled
+                  ? 'not-allowed'
+                  : 'pointer'
               }}
             >
-              Check Payment Status
+              {loading
+                ? 'Sending M-Pesa Request...'
+                : checking
+                  ? 'Checking Payment...'
+                  : result?.status === 'completed'
+                    ? '✓ Payment Completed'
+                    : result?.status === 'pending'
+                      ? 'Awaiting Confirmation'
+                      : result?.status === 'failed'
+                        ? 'Retry M-Pesa Payment →'
+                        : 'Pay with M-Pesa →'}
             </button>
-          )}
-        </form>
 
-        <p
-          style={{
-            fontSize: '12px',
-            color: '#64748b',
-            marginTop: '24px',
-            textAlign: 'center',
-            lineHeight: 1.7
-          }}
-        >
-          MediRescue currently uses M-Pesa Sandbox.
-          Transactions are simulated and do not transfer
-          real money. Real phone prompts require approved
-          production credentials.
-        </p>
+            {result?.status === 'pending' &&
+              !checking && (
+                <button
+                  type="button"
+                  onClick={handleManualCheck}
+                  style={styles.checkButton}
+                >
+                  Check Payment Status →
+                </button>
+              )}
+          </form>
+        </section>
+
+        <section style={styles.sandbox}>
+          <strong>
+            ℹ M-Pesa Sandbox Environment
+          </strong>
+
+          <p style={{ margin: '8px 0 0' }}>
+            MediRescue currently uses M-Pesa Sandbox.
+            Transactions are simulated and do not
+            transfer real money. Real phone prompts
+            require approved production credentials.
+          </p>
+        </section>
+
+        <footer style={styles.footer}>
+          © {new Date().getFullYear()} MediRescue
+          {' '}• Emergency Medical Response System
+        </footer>
+
       </main>
     </div>
   )

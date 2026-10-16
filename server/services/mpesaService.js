@@ -1,6 +1,10 @@
 
 const axios = require('axios');
 
+// ==========================================
+// M-PESA SANDBOX CONFIGURATION
+// ==========================================
+
 const BASE_URL = 'https://sandbox.safaricom.co.ke';
 
 // ==========================================
@@ -74,7 +78,7 @@ function generateTimestamp() {
 }
 
 // ==========================================
-// GENERATE STK PASSWORD
+// GENERATE STK CREDENTIALS
 // ==========================================
 
 function generateStkCredentials() {
@@ -98,6 +102,47 @@ function generateStkCredentials() {
     timestamp,
     password
   };
+}
+
+// ==========================================
+// VALIDATE CALLBACK URL
+// ==========================================
+
+function validateCallbackUrl(callbackUrl) {
+  if (!callbackUrl || typeof callbackUrl !== 'string') {
+    throw new Error('M-Pesa callback URL is required');
+  }
+
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(callbackUrl);
+  } catch {
+    throw new Error('Invalid M-Pesa callback URL');
+  }
+
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    !parsedUrl.hostname ||
+    parsedUrl.username ||
+    parsedUrl.password
+  ) {
+    throw new Error(
+      'M-Pesa callback URL must be a valid HTTPS URL'
+    );
+  }
+
+  if (
+    ['localhost', '127.0.0.1', '::1'].includes(
+      parsedUrl.hostname.toLowerCase()
+    )
+  ) {
+    throw new Error(
+      'M-Pesa callback URL must be publicly accessible'
+    );
+  }
+
+  return parsedUrl.toString();
 }
 
 // ==========================================
@@ -130,14 +175,9 @@ async function initiateStkPush(
     );
   }
 
-  if (
-    !callbackUrl ||
-    !/^https:\/\//i.test(callbackUrl)
-  ) {
-    throw new Error(
-      'M-Pesa callback URL must use HTTPS'
-    );
-  }
+  const validCallbackUrl = validateCallbackUrl(
+    callbackUrl
+  );
 
   const token = await getMpesaAccessToken();
 
@@ -156,7 +196,7 @@ async function initiateStkPush(
     PartyA: normalizedPhone,
     PartyB: shortcode,
     PhoneNumber: normalizedPhone,
-    CallBackURL: callbackUrl,
+    CallBackURL: validCallbackUrl,
     AccountReference: String(reference).slice(0, 12),
     TransactionDesc: 'MediRescue payment'
   };
@@ -185,7 +225,9 @@ async function queryStkPushStatus(checkoutRequestId) {
     typeof checkoutRequestId !== 'string' ||
     !checkoutRequestId.trim()
   ) {
-    throw new Error('CheckoutRequestID is required');
+    throw new Error(
+      'CheckoutRequestID is required'
+    );
   }
 
   const token = await getMpesaAccessToken();
@@ -200,7 +242,7 @@ async function queryStkPushStatus(checkoutRequestId) {
     BusinessShortCode: shortcode,
     Password: password,
     Timestamp: timestamp,
-    CheckoutRequestID: checkoutRequestId
+    CheckoutRequestID: checkoutRequestId.trim()
   };
 
   const response = await axios.post(

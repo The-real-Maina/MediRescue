@@ -1,15 +1,21 @@
-
 const express = require('express');
 const router = express.Router();
 
 const mpesaController = require('../controllers/mpesaController');
+
+const simulationController = require(
+  '../controllers/paymentSimulationController'
+);
 
 const {
   authenticate,
   authorize
 } = require('../middleware/auth');
 
-// Patient initiates M-Pesa payment
+// ======================================
+// REAL M-PESA PAYMENT
+// ======================================
+
 router.post(
   '/initiate',
   authenticate,
@@ -17,7 +23,10 @@ router.post(
   mpesaController.initiatePayment
 );
 
-// Patient checks payment status
+// ======================================
+// REAL M-PESA PAYMENT STATUS
+// ======================================
+
 router.get(
   '/status/:caseId',
   authenticate,
@@ -25,10 +34,24 @@ router.get(
   mpesaController.checkPaymentStatus
 );
 
-// Safaricom callback
+// ======================================
+// SAFARICOM CALLBACK
+// ======================================
+
 router.post(
   '/callback',
   mpesaController.handleCallback
+);
+
+// ======================================
+// DEVELOPMENT PAYMENT SIMULATION
+// ======================================
+
+router.post(
+  '/simulate',
+  authenticate,
+  authorize('patient'),
+  simulationController.simulatePayment
 );
 
 module.exports = router;

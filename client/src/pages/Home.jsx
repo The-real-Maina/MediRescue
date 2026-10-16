@@ -76,9 +76,9 @@ function Home() {
 
   const container = {
     width: '100%',
-    maxWidth: 1200,
+    maxWidth: 1560,
     margin: '0 auto',
-    padding: '0 24px',
+    padding: '0 clamp(20px, 4vw, 72px)',
     boxSizing: 'border-box'
   }
 
@@ -87,6 +87,7 @@ function Home() {
       <style>{`
         .medirescue-home {
           width: 100%;
+          max-width: none;
           min-height: 100vh;
           font-family: Arial, Helvetica, sans-serif;
           background: #fff;

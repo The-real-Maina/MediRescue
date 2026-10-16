@@ -6,9 +6,9 @@ const {
   queryStkPushStatus
 } = require('../services/mpesaService');
 
-// ======================================
+// ==========================================
 // INITIATE M-PESA PAYMENT
-// ======================================
+// ==========================================
 
 exports.initiatePayment = async (req, res) => {
   const patientId = req.user.id;
@@ -51,7 +51,6 @@ exports.initiatePayment = async (req, res) => {
       });
     }
 
-    // Payment amount must come from the database.
     const paymentAmount = Number(
       emergencyCase.payment_amount
     );
@@ -82,9 +81,27 @@ exports.initiatePayment = async (req, res) => {
 
     const callbackUrl = process.env.MPESA_CALLBACK_URL;
 
+    if (!callbackUrl) {
+      return res.status(500).json({
+        error: 'M-Pesa callback URL is not configured'
+      });
+    }
+
+    let parsedCallbackUrl;
+
+    try {
+      parsedCallbackUrl = new URL(callbackUrl);
+    } catch {
+      return res.status(500).json({
+        error: 'Invalid M-Pesa callback URL'
+      });
+    }
+
     if (
-      !callbackUrl ||
-      !/^https:\/\//i.test(callbackUrl)
+      parsedCallbackUrl.protocol !== 'https:' ||
+      !parsedCallbackUrl.hostname ||
+      parsedCallbackUrl.username ||
+      parsedCallbackUrl.password
     ) {
       return res.status(500).json({
         error: 'A valid HTTPS M-Pesa callback URL is required'
@@ -134,7 +151,6 @@ exports.initiatePayment = async (req, res) => {
       checkout_request_id: result.CheckoutRequestID,
       status: 'pending'
     });
-
   } catch (error) {
     console.error(
       'M-Pesa initiation error:',
@@ -147,9 +163,9 @@ exports.initiatePayment = async (req, res) => {
   }
 };
 
-// ======================================
+// ==========================================
 // QUERY AND VERIFY PAYMENT STATUS
-// ======================================
+// ==========================================
 
 exports.checkPaymentStatus = async (req, res) => {
   const patientId = req.user.id;
@@ -193,7 +209,6 @@ exports.checkPaymentStatus = async (req, res) => {
       });
     }
 
-    // Verify payment directly with Safaricom.
     const result = await queryStkPushStatus(
       payment.checkout_request_id
     );
@@ -231,7 +246,6 @@ exports.checkPaymentStatus = async (req, res) => {
     const newStatus =
       resultCode === 0 ? 'completed' : 'failed';
 
-    // Update payment and emergency case together.
     const connection = await pool.getConnection();
 
     try {
@@ -253,7 +267,6 @@ exports.checkPaymentStatus = async (req, res) => {
         });
       }
 
-      // Avoid processing the same payment twice.
       if (lockedPayments[0].status !== 'pending') {
         await connection.rollback();
 
@@ -276,7 +289,6 @@ exports.checkPaymentStatus = async (req, res) => {
       );
 
       if (newStatus === 'completed') {
-        // Only mark a case as paid after verification.
         const [caseUpdate] = await connection.query(
           `UPDATE \`case\`
            SET status = 'paid'
@@ -311,14 +323,12 @@ exports.checkPaymentStatus = async (req, res) => {
         status: newStatus,
         result_code: resultCode
       });
-
     } catch (error) {
       await connection.rollback();
       throw error;
     } finally {
       connection.release();
     }
-
   } catch (error) {
     console.error(
       'M-Pesa status query error:',
@@ -331,9 +341,9 @@ exports.checkPaymentStatus = async (req, res) => {
   }
 };
 
-// ======================================
+// ==========================================
 // RECEIVE SAFARICOM CALLBACK
-// ======================================
+// ==========================================
 
 exports.handleCallback = async (req, res) => {
   const callback = req.body?.Body?.stkCallback;
@@ -349,8 +359,9 @@ exports.handleCallback = async (req, res) => {
     });
   }
 
-  // Do not use an unauthenticated callback alone
-  // to mark a payment as completed.
+  // Do not trust a callback alone as proof of payment.
+  // Payment is verified through the Safaricom status query.
+
   console.log(
     'M-Pesa callback received for checkout:',
     callback.CheckoutRequestID
