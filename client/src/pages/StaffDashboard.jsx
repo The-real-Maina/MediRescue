@@ -1,52 +1,61 @@
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap'
 
-const API = 'http://localhost:5000/api'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-const nextStatuses = {
-  dispatched: 'picked_up',
-  picked_up: 'in_treatment',
-  in_treatment: 'payment_pending',
-  paid: 'closed'
-}
-
-const formatStatus = (status) =>
-  String(status || 'Unknown')
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-
-const colors = {
+const COLORS = {
   navy: '#10243a',
   red: '#dc2626',
   background: '#f1f5f9',
   border: '#e2e8f0',
   muted: '#64748b',
-  text: '#17233b'
+  text: '#17233b',
+  green: '#16a34a'
+}
+
+const nextStatuses = {
+  handed_over: 'in_treatment',
+  in_treatment: 'payment_pending',
+  paid: 'closed'
+}
+
+const trackingStages = [
+  { status: 'dispatched', label: 'Ambulance Dispatched', description: 'An ambulance and driver have been assigned.' },
+  { status: 'picked_up', label: 'Patient Picked Up', description: 'The driver has confirmed patient pickup.' },
+  { status: 'arrived_at_hospital', label: 'Arrived at Hospital', description: 'The driver has confirmed hospital arrival.' },
+  { status: 'handed_over', label: 'Patient Handed Over', description: 'Hospital staff have received the patient.' }
+]
+
+const trackingStatuses = [
+  'dispatched',
+  'picked_up',
+  'arrived_at_hospital'
+]
+
+const statusColors = {
+  requested: ['#fff1f2', '#be123c'],
+  dispatched: ['#fff7ed', '#c2410c'],
+  picked_up: ['#eef2ff', '#4338ca'],
+  arrived_at_hospital: ['#e0f2fe', '#0369a1'],
+  handed_over: ['#f0fdfa', '#0f766e'],
+  in_treatment: ['#f5f3ff', '#6d28d9'],
+  payment_pending: ['#fffbeb', '#92400e'],
+  paid: ['#ecfdf5', '#047857'],
+  closed: ['#ecfdf5', '#047857'],
+  available: ['#ecfdf5', '#047857'],
+  dispatched_ambulance: ['#fff7ed', '#c2410c'],
+  en_route: ['#eff6ff', '#1d4ed8'],
+  returning: ['#fff7ed', '#c2410c']
 }
 
 const styles = {
   page: {
     minHeight: '100vh',
-    background: colors.background,
-    color: colors.text,
+    background: COLORS.background,
+    color: COLORS.text,
     fontFamily: "'Segoe UI', Arial, sans-serif"
-  },
-  header: {
-    background: colors.navy,
-    borderBottom: `4px solid ${colors.red}`,
-    color: '#ffffff'
-  },
-  headerInner: {
-    maxWidth: 1240,
-    margin: 'auto',
-    padding: '20px 24px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 18,
-    flexWrap: 'wrap'
   },
   content: {
     maxWidth: 1240,
@@ -55,35 +64,33 @@ const styles = {
     boxSizing: 'border-box'
   },
   eyebrow: {
-    color: colors.red,
+    color: COLORS.red,
     fontSize: 12,
     fontWeight: 800,
     letterSpacing: 1.5,
     margin: '0 0 12px'
   },
   title: {
-    color: colors.navy,
+    color: COLORS.navy,
     fontSize: 'clamp(30px, 4vw, 40px)',
     fontWeight: 800,
-    lineHeight: 1.2,
-    margin: '0 0 12px',
-    letterSpacing: '-0.8px'
+    margin: '0 0 12px'
   },
   subtitle: {
-    color: colors.muted,
+    color: COLORS.muted,
     fontSize: 15,
     lineHeight: 1.7,
     margin: 0
   },
   card: {
-    background: '#ffffff',
-    border: `1px solid ${colors.border}`,
+    background: '#fff',
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 15,
     boxShadow: '0 6px 24px rgba(15,23,42,0.05)'
   },
   button: {
-    background: colors.red,
-    color: '#ffffff',
+    background: COLORS.red,
+    color: '#fff',
     border: 'none',
     borderRadius: 9,
     padding: '12px 18px',
@@ -93,17 +100,18 @@ const styles = {
     minHeight: 43
   },
   secondaryButton: {
-    background: '#ffffff',
-    color: colors.navy,
-    border: `1px solid ${colors.border}`,
+    background: '#fff',
+    color: COLORS.navy,
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 9,
     padding: '12px 18px',
     fontWeight: 700,
     fontSize: 13,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    minHeight: 43
   },
   label: {
-    color: colors.muted,
+    color: COLORS.muted,
     fontSize: 11,
     fontWeight: 800,
     letterSpacing: 1,
@@ -111,13 +119,13 @@ const styles = {
     textTransform: 'uppercase'
   },
   sectionTitle: {
-    color: colors.navy,
+    color: COLORS.navy,
     fontSize: 23,
     fontWeight: 800,
     margin: 0
   },
   sectionDescription: {
-    color: colors.muted,
+    color: COLORS.muted,
     fontSize: 14,
     lineHeight: 1.7,
     margin: '8px 0 0'
@@ -130,11 +138,10 @@ const styles = {
   },
   detailGrid: {
     display: 'grid',
-    gridTemplateColumns:
-      'repeat(auto-fit, minmax(min(100%, 175px), 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
     gap: 18,
     background: '#f8fafc',
-    border: `1px solid ${colors.border}`,
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 11,
     padding: 20
   },
@@ -143,8 +150,8 @@ const styles = {
     minHeight: 44,
     borderRadius: 9,
     border: '1px solid #cbd5e1',
-    background: '#ffffff',
-    color: colors.text,
+    background: '#fff',
+    color: COLORS.text,
     padding: '10px 13px',
     fontSize: 14
   },
@@ -152,7 +159,7 @@ const styles = {
     marginTop: 23,
     padding: 20,
     background: '#f8fafc',
-    border: `1px solid ${colors.border}`,
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 11
   },
   footer: {
@@ -163,23 +170,15 @@ const styles = {
   }
 }
 
-const statusVariants = {
-  requested: ['#fff1f2', '#be123c'],
-  assigned: ['#eff6ff', '#1d4ed8'],
-  dispatched: ['#fff7ed', '#c2410c'],
-  picked_up: ['#eef2ff', '#4338ca'],
-  in_treatment: ['#f5f3ff', '#6d28d9'],
-  payment_pending: ['#fffbeb', '#92400e'],
-  paid: ['#ecfdf5', '#047857'],
-  closed: ['#ecfdf5', '#047857'],
-  available: ['#ecfdf5', '#047857'],
-  en_route: ['#eff6ff', '#1d4ed8'],
-  returning: ['#fff7ed', '#c2410c']
+function formatStatus(status) {
+  return String(status || 'Unknown')
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
 function StatusBadge({ status }) {
   const [background, color] =
-    statusVariants[status] || ['#f1f5f9', '#475569']
+    statusColors[status] || ['#f1f5f9', '#475569']
 
   return (
     <span
@@ -202,26 +201,256 @@ function StatusBadge({ status }) {
   )
 }
 
-function StaffDashboard({ view = 'dashboard' }) {
+function TrackingTimeline({ currentStatus }) {
+  const currentIndex = trackingStages.findIndex(
+    stage => stage.status === currentStatus
+  )
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <h4 style={{ color: COLORS.navy, marginBottom: 20 }}>
+        Emergency Response Progress
+      </h4>
+
+      {trackingStages.map((stage, index) => {
+        const completed = index < currentIndex
+        const current = index === currentIndex
+        const reached = completed || current
+
+        return (
+          <div
+            key={stage.status}
+            style={{
+              display: 'flex',
+              gap: 17,
+              paddingBottom: index === trackingStages.length - 1 ? 0 : 25,
+              position: 'relative'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                minWidth: 34
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: reached ? COLORS.green : '#e2e8f0',
+                  color: reached ? '#fff' : '#64748b',
+                  fontWeight: 800,
+                  zIndex: 1
+                }}
+              >
+                {completed ? '✓' : index + 1}
+              </div>
+
+              {index < trackingStages.length - 1 && (
+                <div
+                  style={{
+                    width: 3,
+                    flex: 1,
+                    minHeight: 30,
+                    background: completed ? COLORS.green : '#e2e8f0',
+                    marginTop: 5
+                  }}
+                />
+              )}
+            </div>
+
+            <div style={{ paddingTop: 3, flex: 1 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 10
+                }}
+              >
+                <strong style={{ color: COLORS.navy }}>
+                  {stage.label}
+                </strong>
+
+                {current && (
+                  <span style={{
+                    background: '#dbeafe',
+                    color: '#1d4ed8',
+                    borderRadius: 20,
+                    padding: '4px 9px',
+                    fontSize: 11,
+                    fontWeight: 800
+                  }}>
+                    CURRENT STAGE
+                  </span>
+                )}
+              </div>
+
+              <p style={{
+                color: COLORS.muted,
+                fontSize: 13,
+                margin: '6px 0'
+              }}>
+                {stage.description}
+              </p>
+
+              <span style={{
+                color: completed
+                  ? COLORS.green
+                  : current
+                    ? '#1d4ed8'
+                    : '#94a3b8',
+                fontSize: 12,
+                fontWeight: 700
+              }}>
+                {completed
+                  ? 'Completed'
+                  : current
+                    ? 'In progress / latest confirmed stage'
+                    : 'Pending'}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TrackingCard({ item }) {
+  return (
+    <article
+      style={{
+        ...styles.card,
+        overflow: 'hidden',
+        marginBottom: 20
+      }}
+    >
+      <div style={{ height: 4, background: COLORS.red }} />
+
+      <div style={{ padding: 25 }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 14,
+          marginBottom: 20
+        }}>
+          <div>
+            <p style={styles.eyebrow}>
+              EMERGENCY CASE #{item.id}
+            </p>
+
+            <h3 style={{
+              color: COLORS.navy,
+              fontSize: 21,
+              margin: 0
+            }}>
+              {item.emergency_type || 'Emergency Response'}
+            </h3>
+          </div>
+
+          <StatusBadge status={item.status} />
+        </div>
+
+        <div style={styles.detailGrid}>
+          <div>
+            <p style={styles.label}>PATIENT</p>
+            <strong>
+              {item.patient_name || `Patient #${item.patient_id}`}
+            </strong>
+          </div>
+
+          <div>
+            <p style={styles.label}>AMBULANCE</p>
+            <strong>Ambulance #{item.ambulance_id}</strong>
+          </div>
+
+          <div>
+            <p style={styles.label}>CURRENT STATUS</p>
+            <StatusBadge status={item.status} />
+          </div>
+
+          <div>
+            <p style={styles.label}>SEVERITY</p>
+            <strong>{formatStatus(item.severity)}</strong>
+          </div>
+        </div>
+
+        <TrackingTimeline currentStatus={item.status} />
+
+        {item.status === 'dispatched' && (
+          <div style={{
+            ...styles.actionPanel,
+            background: '#fff7ed'
+          }}>
+            <strong>Awaiting driver pickup confirmation</strong>
+            <p style={styles.sectionDescription}>
+              The ambulance has been dispatched. The driver must
+              confirm that the patient has been picked up.
+            </p>
+          </div>
+        )}
+
+        {item.status === 'picked_up' && (
+          <div style={{
+            ...styles.actionPanel,
+            background: '#eff6ff'
+          }}>
+            <strong>Patient picked up</strong>
+            <p style={styles.sectionDescription}>
+              The driver has confirmed pickup. Hospital staff
+              are waiting for the driver to confirm arrival.
+            </p>
+          </div>
+        )}
+
+        {item.status === 'arrived_at_hospital' && (
+          <div style={{
+            ...styles.actionPanel,
+            background: '#ecfdf5'
+          }}>
+            <strong>Ambulance arrived at hospital</strong>
+            <p style={styles.sectionDescription}>
+              The driver has confirmed arrival. Hospital staff
+              can complete patient handover from Emergency Cases.
+            </p>
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
+export default function StaffDashboard({ view = 'dashboard' }) {
   const navigate = useNavigate()
 
   const [cases, setCases] = useState([])
   const [ambulances, setAmbulances] = useState([])
   const [ambulanceStatuses, setAmbulanceStatuses] = useState({})
-  const [returningAmbulance, setReturningAmbulance] = useState(null)
   const [selectedAmbulances, setSelectedAmbulances] = useState({})
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
   const [dispatchingCase, setDispatchingCase] = useState(null)
   const [updatingCase, setUpdatingCase] = useState(null)
+  const [returningAmbulance, setReturningAmbulance] = useState(null)
+  const [lastRefresh, setLastRefresh] = useState(null)
 
-  const request = async (path, options = {}) => {
+  const request = useCallback(async (path, options = {}) => {
     const token = localStorage.getItem('medirescue_token')
 
     if (!token) {
-      navigate('/login')
-      throw new Error('Please log in again')
+      navigate('/login', { replace: true })
+      throw new Error('Please log in again.')
     }
 
     const response = await fetch(`${API}${path}`, {
@@ -233,20 +462,22 @@ function StaffDashboard({ view = 'dashboard' }) {
       }
     })
 
-    const data = await response.json()
+    const data = await response.json().catch(() => ({}))
 
     if (!response.ok) {
       if (response.status === 401) {
-        navigate('/login')
+        localStorage.removeItem('medirescue_token')
+        localStorage.removeItem('medirescue_user')
+        navigate('/login', { replace: true })
       }
 
       throw new Error(data.error || 'Request failed')
     }
 
     return data
-  }
+  }, [navigate])
 
-  const loadDashboard = async (showLoading = true) => {
+  const loadDashboard = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
 
     try {
@@ -264,40 +495,58 @@ function StaffDashboard({ view = 'dashboard' }) {
         Array.isArray(ambulanceData) ? ambulanceData : []
       )
 
-      const ids = [
+      const ambulanceIds = [
         ...new Set(
           caseList
-            .map((item) => item.ambulance_id)
+            .map(item => item.ambulance_id)
             .filter(Boolean)
         )
       ]
 
       const results = await Promise.allSettled(
-        ids.map((id) => request(`/ambulances/${id}/status`))
+        ambulanceIds.map(id =>
+          request(`/ambulances/${id}/status`)
+        )
       )
 
       const statusMap = {}
 
-      ids.forEach((id, index) => {
+      ambulanceIds.forEach((id, index) => {
         if (results[index].status === 'fulfilled') {
-          statusMap[id] = results[index].value
+          const result = results[index].value
+
+          statusMap[id] =
+            typeof result === 'string'
+              ? result
+              : result?.status || result?.ambulance?.status
         }
       })
 
       setAmbulanceStatuses(statusMap)
+      setLastRefresh(new Date())
       setError('')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to load hospital data')
     } finally {
       if (showLoading) setLoading(false)
     }
-  }
+  }, [request])
 
   useEffect(() => {
     loadDashboard()
-  }, [])
+  }, [loadDashboard])
 
-  const handleDispatch = async (caseId) => {
+  useEffect(() => {
+    if (view !== 'tracking') return
+
+    const interval = setInterval(() => {
+      loadDashboard(false)
+    }, 10000)
+
+    return () => clearInterval(interval)
+  }, [view, loadDashboard])
+
+  const handleDispatch = async caseId => {
     const ambulanceId = selectedAmbulances[caseId]
 
     if (!ambulanceId) {
@@ -310,21 +559,18 @@ function StaffDashboard({ view = 'dashboard' }) {
     setDispatchingCase(caseId)
 
     try {
-      const data = await request(
-        `/cases/${caseId}/ambulance`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            ambulance_id: Number(ambulanceId)
-          })
-        }
-      )
+      const data = await request(`/cases/${caseId}/ambulance`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          ambulance_id: Number(ambulanceId)
+        })
+      })
 
       setSuccess(
-        `Ambulance ${data.ambulance_plate} dispatched for Case #${caseId}.`
+        `Ambulance ${data.ambulance_plate || `#${ambulanceId}`} dispatched for Case #${caseId}.`
       )
 
-      setSelectedAmbulances((current) => {
+      setSelectedAmbulances(current => {
         const updated = { ...current }
         delete updated[caseId]
         return updated
@@ -338,8 +584,33 @@ function StaffDashboard({ view = 'dashboard' }) {
     }
   }
 
+  const handleHandover = async caseId => {
+    setError('')
+    setSuccess('')
+    setUpdatingCase(caseId)
+
+    try {
+      await request(`/cases/${caseId}/handover`, {
+        method: 'PATCH'
+      })
+
+      setSuccess(
+        `Patient handover confirmed for Case #${caseId}. Treatment can now begin.`
+      )
+
+      await loadDashboard(false)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUpdatingCase(null)
+    }
+  }
+
   const handleStatusUpdate = async (caseId, status) => {
-    if (!status || status === 'paid') return
+    if (!['in_treatment', 'payment_pending', 'closed'].includes(status)) {
+      setError('This status cannot be updated by hospital staff.')
+      return
+    }
 
     setError('')
     setSuccess('')
@@ -352,10 +623,7 @@ function StaffDashboard({ view = 'dashboard' }) {
       })
 
       setSuccess(
-        `Case #${caseId} updated to ${formatStatus(status)}.` +
-        (status === 'closed'
-          ? ' The ambulance has been released.'
-          : '')
+        `Case #${caseId} updated to ${formatStatus(status)}.`
       )
 
       await loadDashboard(false)
@@ -366,7 +634,7 @@ function StaffDashboard({ view = 'dashboard' }) {
     }
   }
 
-  const handleAmbulanceReturn = async (ambulanceId) => {
+  const handleAmbulanceReturn = async ambulanceId => {
     const confirmed = window.confirm(
       `Confirm Ambulance #${ambulanceId} has physically returned and is ready for another emergency?`
     )
@@ -383,7 +651,7 @@ function StaffDashboard({ view = 'dashboard' }) {
       })
 
       setSuccess(
-        `Ambulance #${ambulanceId} return confirmed. It is now available for future dispatch.`
+        `Ambulance #${ambulanceId} return confirmed.`
       )
 
       await loadDashboard(false)
@@ -394,73 +662,89 @@ function StaffDashboard({ view = 'dashboard' }) {
     }
   }
 
-  const visibleCases = cases.filter(item => view === 'history' ? item.status === 'closed' : item.status !== 'closed')
+  const visibleCases = cases.filter(item =>
+    view === 'history'
+      ? item.status === 'closed'
+      : item.status !== 'closed'
+  )
 
-  const totalCases = cases.length
-
-  const pendingCases = cases.filter(
-    (item) => item.status === 'payment_pending'
-  ).length
-
-  const activeCases = cases.filter(
-    (item) =>
-      !['closed', 'paid', 'payment_pending'].includes(item.status)
-  ).length
-
-  const closedCases = cases.filter(
-    (item) => item.status === 'closed'
-  ).length
+  const trackedCases = cases.filter(item =>
+    trackingStatuses.includes(item.status) &&
+    item.ambulance_id
+  )
 
   const summary = [
     {
       label: 'Total Cases',
-      value: totalCases,
+      value: cases.length,
       symbol: '▤',
       accent: '#2563eb',
       tint: '#eff6ff'
     },
     {
       label: 'Active Cases',
-      value: activeCases,
+      value: cases.filter(item =>
+        !['closed', 'paid', 'payment_pending'].includes(item.status)
+      ).length,
       symbol: '✚',
-      accent: '#dc2626',
+      accent: COLORS.red,
       tint: '#fff1f2'
     },
     {
       label: 'Awaiting Payment',
-      value: pendingCases,
+      value: cases.filter(item =>
+        item.status === 'payment_pending'
+      ).length,
       symbol: 'KSh',
       accent: '#d97706',
       tint: '#fffbeb'
     },
     {
       label: 'Closed Cases',
-      value: closedCases,
+      value: cases.filter(item =>
+        item.status === 'closed'
+      ).length,
       symbol: '✓',
       accent: '#059669',
       tint: '#ecfdf5'
     }
   ]
 
+  const viewTitles = {
+    dashboard: 'Hospital Staff Dashboard',
+    tracking: 'Ambulance Tracking',
+    cases: 'Emergency Case Management',
+    history: 'Closed Cases / History'
+  }
+
+  const viewDescriptions = {
+    dashboard:
+      'An overview of emergency cases and hospital response performance.',
+    tracking:
+      'Track dispatched ambulances from patient pickup to hospital arrival.',
+    cases:
+      'Review emergency requests, dispatch ambulances and manage patient response.',
+    history:
+      'Review completed and closed emergency cases.'
+  }
+
   return (
     <div style={styles.page}>
       <main style={styles.content}>
-        {/* INTRODUCTION */}
         <section style={{ marginBottom: 30 }}>
           <p style={styles.eyebrow}>
             EMERGENCY RESPONSE CONTROL CENTER
           </p>
 
           <h1 style={styles.title}>
-            {view === 'dashboard' ? 'Hospital Staff Dashboard' : view === 'tracking' ? 'Live Operations' : view === 'history' ? 'Closed Cases / History' : 'Emergency Case Management'}
+            {viewTitles[view] || viewTitles.cases}
           </h1>
 
           <p style={styles.subtitle}>
-            {view === 'dashboard' ? 'An overview of emergency cases and hospital response performance.' : view === 'tracking' ? 'Monitor ambulance locations and latest GPS updates.' : view === 'history' ? 'Review completed and closed emergency cases.' : 'Review emergency requests, dispatch ambulances and manage patient response.'}
+            {viewDescriptions[view] || viewDescriptions.cases}
           </p>
         </section>
 
-        {/* MESSAGES */}
         {error && (
           <div
             role="alert"
@@ -489,19 +773,14 @@ function StaffDashboard({ view = 'dashboard' }) {
           </div>
         )}
 
-        {view === 'dashboard' && (<>
-        {/* STATISTICS */}
-        {!loading && (
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(min(100%, 215px), 1fr))',
-              gap: 17,
-              marginBottom: 35
-            }}
-          >
-            {summary.map((item) => (
+        {view === 'dashboard' && (
+          <section style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))',
+            gap: 17,
+            marginBottom: 35
+          }}>
+            {summary.map(item => (
               <div
                 key={item.label}
                 style={{
@@ -514,42 +793,34 @@ function StaffDashboard({ view = 'dashboard' }) {
                 }}
               >
                 <div>
-                  <p
-                    style={{
-                      color: colors.muted,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      margin: '0 0 12px'
-                    }}
-                  >
+                  <p style={{
+                    color: COLORS.muted,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    margin: '0 0 12px'
+                  }}>
                     {item.label}
                   </p>
 
-                  <strong
-                    style={{
-                      color: colors.navy,
-                      fontSize: 33,
-                      lineHeight: 1
-                    }}
-                  >
+                  <strong style={{
+                    color: COLORS.navy,
+                    fontSize: 33
+                  }}>
                     {item.value}
                   </strong>
                 </div>
 
-                <span
-                  aria-hidden="true"
-                  style={{
-                    background: item.tint,
-                    color: item.accent,
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontWeight: 900,
-                    fontSize: item.symbol === 'KSh' ? 13 : 24
-                  }}
-                >
+                <span style={{
+                  background: item.tint,
+                  color: item.accent,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontWeight: 900,
+                  fontSize: item.symbol === 'KSh' ? 13 : 24
+                }}>
                   {item.symbol}
                 </span>
               </div>
@@ -557,518 +828,594 @@ function StaffDashboard({ view = 'dashboard' }) {
           </section>
         )}
 
-        </>)}
+        {view === 'tracking' && (
+          <section style={{ marginBottom: 36 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 15,
+              marginBottom: 22
+            }}>
+              <div>
+                <p style={styles.eyebrow}>
+                  LIVE AMBULANCE OPERATIONS
+                </p>
 
-        {view === 'tracking' && (<>
-        {/* GPS TRACKING */}
-        <section style={{ marginBottom: 36 }}>
-          <div style={{ marginBottom: 16 }}>
-            <p style={styles.eyebrow}>
-              LIVE OPERATIONS
-            </p>
+                <h2 style={styles.sectionTitle}>
+                  Dispatched Ambulances
+                </h2>
 
-            <h2 style={styles.sectionTitle}>
-              Ambulance GPS Tracking
-            </h2>
+                <p style={styles.sectionDescription}>
+                  Only ambulances assigned to active emergency responses
+                  appear below.
+                </p>
+              </div>
 
-            <p style={styles.sectionDescription}>
-              Monitor ambulance locations and the latest
-              GPS updates for your hospital.
-            </p>
-          </div>
-
-          <AmbulanceTrackingMap />
-        </section>
-
-        </>)}
-
-        {(view === 'cases' || view === 'history') && (<>
-        {/* CASE MANAGEMENT HEADING */}
-        <section
-          style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 15,
-            marginBottom: 20
-          }}
-        >
-          <div>
-            <p style={styles.eyebrow}>
-              CASE MANAGEMENT
-            </p>
-
-            <h2 style={styles.sectionTitle}>
-              {view === 'history' ? 'Closed Cases / History' : 'Emergency Cases'}
-            </h2>
-
-            <p style={styles.sectionDescription}>
-              {view === 'history' ? 'Review previously closed emergencies.' : 'Review requests and coordinate each patient’s emergency response.'}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => loadDashboard(false)}
-            style={styles.secondaryButton}
-          >
-            ↻ Refresh Cases
-          </button>
-        </section>
-
-        {/* LOADING */}
-        {loading && (
-          <div
-            style={{
-              ...styles.card,
-              padding: 30,
-              color: colors.muted
-            }}
-          >
-            Loading hospital emergency cases...
-          </div>
-        )}
-
-        {/* EMPTY STATE */}
-        {!loading && visibleCases.length === 0 && !error && (
-          <div
-            style={{
-              ...styles.card,
-              padding: '45px 24px',
-              textAlign: 'center'
-            }}
-          >
-            <div
-              style={{
-                color: '#059669',
-                fontSize: 34,
-                marginBottom: 12
-              }}
-            >
-              ✓
+              <button
+                type="button"
+                onClick={() => loadDashboard(false)}
+                style={styles.secondaryButton}
+              >
+                ↻ Refresh Tracking
+              </button>
             </div>
 
-            <h3
-              style={{
-                color: colors.navy,
-                margin: '0 0 8px'
-              }}
-            >
-              {view === 'history' ? 'No Closed Cases' : 'No Emergency Cases'}
-            </h3>
-
-            <p
-              style={{
-                color: colors.muted,
-                margin: 0
-              }}
-            >
-              {view === 'history' ? 'No completed cases have been recorded yet.' : 'No active emergency requests for this hospital.'}
-            </p>
-          </div>
-        )}
-
-        {/* EMERGENCY CASES */}
-        {!loading && visibleCases.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 20
-            }}
-          >
-            {visibleCases.map((caseItem) => {
-              const nextStatus = nextStatuses[caseItem.status]
-
-              const ambulanceStatus =
-                ambulanceStatuses[caseItem.ambulance_id]?.status
-
-              const canReturn =
-                [
-                  'in_treatment',
-                  'payment_pending',
-                  'paid'
-                ].includes(caseItem.status) &&
-                [
-                  'dispatched',
-                  'en_route',
-                  'returning'
-                ].includes(ambulanceStatus)
-
-              return (
-                <article
-                  key={caseItem.id}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 15,
+              marginBottom: 24
+            }}>
+              {[
+                {
+                  label: 'Active Dispatches',
+                  value: trackedCases.length
+                },
+                {
+                  label: 'Awaiting Pickup',
+                  value: trackedCases.filter(item =>
+                    item.status === 'dispatched'
+                  ).length
+                },
+                {
+                  label: 'Patient Picked Up',
+                  value: trackedCases.filter(item =>
+                    item.status === 'picked_up'
+                  ).length
+                },
+                {
+                  label: 'Arrived at Hospital',
+                  value: trackedCases.filter(item =>
+                    item.status === 'arrived_at_hospital'
+                  ).length
+                }
+              ].map(item => (
+                <div
+                  key={item.label}
                   style={{
                     ...styles.card,
-                    overflow: 'hidden'
+                    padding: 20
                   }}
                 >
-                  <div
-                    style={{
-                      height: 4,
-                      background: colors.red
-                    }}
-                  />
+                  <strong style={{
+                    display: 'block',
+                    color: COLORS.navy,
+                    fontSize: 29
+                  }}>
+                    {item.value}
+                  </strong>
 
-                  <div
-                    style={{
-                      padding: 'clamp(20px, 4vw, 28px)'
-                    }}
-                  >
-                    {/* CASE HEADER */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        flexWrap: 'wrap',
-                        gap: 16,
-                        marginBottom: 20
-                      }}
-                    >
-                      <div>
-                        <p style={styles.eyebrow}>
-                          EMERGENCY CASE #{caseItem.id}
-                        </p>
+                  <span style={{
+                    color: COLORS.muted,
+                    fontSize: 13,
+                    fontWeight: 700
+                  }}>
+                    {item.label}
+                  </span>
+                </div>
+              ))}
+            </div>
 
-                        <h3
-                          style={{
-                            color: colors.navy,
-                            fontSize: 22,
-                            fontWeight: 800,
-                            margin: 0
-                          }}
-                        >
-                          {caseItem.emergency_type ||
-                            'Emergency Request'}
-                        </h3>
-                      </div>
+            {loading && (
+              <div style={{
+                ...styles.card,
+                padding: 25,
+                marginBottom: 22
+              }}>
+                Loading dispatched emergency cases...
+              </div>
+            )}
 
-                      <StatusBadge status={caseItem.status} />
-                    </div>
+            {!loading && !error && trackedCases.length === 0 && (
+              <div style={{
+                ...styles.card,
+                padding: 30,
+                textAlign: 'center',
+                marginBottom: 25
+              }}>
+                <h3 style={{ color: COLORS.navy }}>
+                  No Active Ambulance Dispatches
+                </h3>
 
-                    {/* DESCRIPTION */}
-                    <p
-                      style={{
-                        color: colors.muted,
-                        fontSize: 14,
-                        lineHeight: 1.8,
-                        margin: '0 0 22px'
-                      }}
-                    >
-                      {caseItem.emergency_desc ||
-                        'No emergency description provided.'}
-                    </p>
+                <p style={styles.sectionDescription}>
+                  When hospital staff dispatch an ambulance for an
+                  emergency, its progress will appear here.
+                </p>
+              </div>
+            )}
 
-                    {/* CASE DETAILS */}
-                    <div style={styles.detailGrid}>
-                      <div>
-                        <p style={styles.label}>
-                          PATIENT
-                        </p>
+            {!loading && trackedCases.map(item => (
+              <TrackingCard key={item.id} item={item} />
+            ))}
 
-                        <strong>
-                          {caseItem.patient_name ||
-                            `Patient ${caseItem.patient_id}`}
-                        </strong>
-                      </div>
+            <p style={{
+              color: COLORS.muted,
+              fontSize: 12,
+              margin: '14px 0 28px'
+            }}>
+              Case statuses refresh automatically every 10 seconds.
+              Driver actions determine pickup and arrival updates.
+              GPS locations are reported separately.
+              {lastRefresh && (
+                <> Last checked: {lastRefresh.toLocaleTimeString()}.</>
+              )}
+            </p>
 
-                      <div>
-                        <p style={styles.label}>
-                          SEVERITY
-                        </p>
-
-                        <strong>
-                          {formatStatus(caseItem.severity)}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <p style={styles.label}>
-                          CURRENT STATUS
-                        </p>
-
-                        <StatusBadge status={caseItem.status} />
-                      </div>
-                    </div>
-
-                    {/* DISPATCH AMBULANCE */}
-                    {caseItem.status === 'requested' && (
-                      <section style={styles.actionPanel}>
-                        <h4
-                          style={{
-                            color: colors.navy,
-                            fontSize: 16,
-                            margin: '0 0 10px'
-                          }}
-                        >
-                          Dispatch Ambulance
-                        </h4>
-
-                        <p style={styles.sectionDescription}>
-                          Select an available ambulance
-                          to respond to this case.
-                        </p>
-
-                        {ambulances.length > 0 ? (
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: 12,
-                              marginTop: 17
-                            }}
-                          >
-                            <select
-                              aria-label={`Ambulance for case ${caseItem.id}`}
-                              value={
-                                selectedAmbulances[caseItem.id] || ''
-                              }
-                              onChange={(e) =>
-                                setSelectedAmbulances(
-                                  (current) => ({
-                                    ...current,
-                                    [caseItem.id]: e.target.value
-                                  })
-                                )
-                              }
-                              style={styles.select}
-                            >
-                              <option value="">
-                                Select available ambulance
-                              </option>
-
-                              {ambulances.map((ambulance) => (
-                                <option
-                                  key={ambulance.id}
-                                  value={ambulance.id}
-                                >
-                                  {ambulance.plate_number}
-                                  {ambulance.driver_id
-                                    ? ` - Driver #${ambulance.driver_id}`
-                                    : ''}
-                                </option>
-                              ))}
-                            </select>
-
-                            <button
-                              type="button"
-                              style={{
-                                ...styles.button,
-                                opacity:
-                                  dispatchingCase !== null ||
-                                  !selectedAmbulances[caseItem.id]
-                                    ? 0.55
-                                    : 1
-                              }}
-                              disabled={
-                                dispatchingCase !== null ||
-                                !selectedAmbulances[caseItem.id]
-                              }
-                              onClick={() =>
-                                handleDispatch(caseItem.id)
-                              }
-                            >
-                              {dispatchingCase === caseItem.id
-                                ? 'Dispatching...'
-                                : 'Dispatch Ambulance →'}
-                            </button>
-                          </div>
-                        ) : (
-                          <p style={styles.sectionDescription}>
-                            No ambulances currently available.
-                          </p>
-                        )}
-                      </section>
-                    )}
-
-                    {/* ASSIGNED AMBULANCE */}
-                    {caseItem.ambulance_id && (
-                      <section
-                        style={{
-                          ...styles.actionPanel,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          flexWrap: 'wrap',
-                          gap: 15
-                        }}
-                      >
-                        <div>
-                          <p style={styles.label}>
-                            ASSIGNED AMBULANCE
-                          </p>
-
-                          <strong
-                            style={{
-                              color: colors.navy,
-                              fontSize: 15
-                            }}
-                          >
-                            Ambulance #{caseItem.ambulance_id}
-                          </strong>
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 12
-                          }}
-                        >
-                          {ambulanceStatus && (
-                            <StatusBadge
-                              status={ambulanceStatus}
-                            />
-                          )}
-
-                          {canReturn && (
-                            <button
-                              type="button"
-                              style={{
-                                ...styles.button,
-                                background: '#0f766e'
-                              }}
-                              disabled={
-                                returningAmbulance !== null
-                              }
-                              onClick={() =>
-                                handleAmbulanceReturn(
-                                  caseItem.ambulance_id
-                                )
-                              }
-                            >
-                              {returningAmbulance ===
-                              caseItem.ambulance_id
-                                ? 'Confirming...'
-                                : 'Confirm Ambulance Return'}
-                            </button>
-                          )}
-                        </div>
-                      </section>
-                    )}
-
-                    {/* PAYMENT PENDING */}
-                    {caseItem.status === 'payment_pending' && (
-                      <section
-                        style={{
-                          marginTop: 22,
-                          padding: 20,
-                          background: '#fffbeb',
-                          border: '1px solid #fde68a',
-                          borderRadius: 11
-                        }}
-                      >
-                        <h4
-                          style={{
-                            color: '#92400e',
-                            margin: '0 0 9px'
-                          }}
-                        >
-                          Awaiting Payment Verification
-                        </h4>
-
-                        <p
-                          style={{
-                            color: '#92400e',
-                            fontSize: 14,
-                            lineHeight: 1.7,
-                            margin: '0 0 15px'
-                          }}
-                        >
-                          This case is awaiting payment.
-                          M-Pesa payment must be verified
-                          before it is marked as paid.
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() => loadDashboard(false)}
-                          style={{
-                            ...styles.button,
-                            background: '#92400e'
-                          }}
-                        >
-                          Refresh Case Status
-                        </button>
-                      </section>
-                    )}
-
-                    {/* CASE STATUS ACTIONS */}
-                    {nextStatus && (
-                      <section
-                        style={{
-                          borderTop:
-                            `1px solid ${colors.border}`,
-                          marginTop: 24,
-                          paddingTop: 21
-                        }}
-                      >
-                        <h4
-                          style={{
-                            color: colors.navy,
-                            fontSize: 16,
-                            margin: '0 0 9px'
-                          }}
-                        >
-                          Case Management
-                        </h4>
-
-                        <p style={styles.sectionDescription}>
-                          Current status:{' '}
-                          <strong style={{ color: colors.text }}>
-                            {formatStatus(caseItem.status)}
-                          </strong>
-                        </p>
-
-                        <button
-                          type="button"
-                          style={{
-                            ...styles.button,
-                            marginTop: 15,
-                            opacity:
-                              updatingCase !== null ? 0.6 : 1
-                          }}
-                          disabled={updatingCase !== null}
-                          onClick={() =>
-                            handleStatusUpdate(
-                              caseItem.id,
-                              nextStatus
-                            )
-                          }
-                        >
-                          {updatingCase === caseItem.id
-                            ? 'Updating...'
-                            : `Mark as ${formatStatus(nextStatus)} →`}
-                        </button>
-                      </section>
-                    )}
-
-                    {/* CLOSED CASE */}
-                    {caseItem.status === 'closed' && (
-                      <div
-                        style={{
-                          marginTop: 22,
-                          padding: 16,
-                          background: '#ecfdf5',
-                          color: '#047857',
-                          borderRadius: 10,
-                          fontWeight: 700
-                        }}
-                      >
-                        ✓ Case completed and closed.
-                      </div>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-          </div>
+            <AmbulanceTrackingMap />
+          </section>
         )}
 
-        </>)}
+        {(view === 'cases' || view === 'history') && (
+          <>
+            <section style={{
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 15,
+              marginBottom: 20
+            }}>
+              <div>
+                <p style={styles.eyebrow}>CASE MANAGEMENT</p>
+
+                <h2 style={styles.sectionTitle}>
+                  {view === 'history'
+                    ? 'Closed Cases / History'
+                    : 'Emergency Cases'}
+                </h2>
+
+                <p style={styles.sectionDescription}>
+                  {view === 'history'
+                    ? 'Review previously closed emergencies.'
+                    : 'Review requests and coordinate each patient’s emergency response.'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => loadDashboard(false)}
+                style={styles.secondaryButton}
+              >
+                ↻ Refresh Cases
+              </button>
+            </section>
+
+            {loading && (
+              <div style={{ ...styles.card, padding: 30 }}>
+                Loading hospital emergency cases...
+              </div>
+            )}
+
+            {!loading && visibleCases.length === 0 && (
+              <div style={{
+                ...styles.card,
+                padding: '45px 24px',
+                textAlign: 'center'
+              }}>
+                <h3 style={{ color: COLORS.navy }}>
+                  {view === 'history'
+                    ? 'No Closed Cases'
+                    : 'No Emergency Cases'}
+                </h3>
+
+                <p style={{ color: COLORS.muted }}>
+                  No records available for this section.
+                </p>
+              </div>
+            )}
+
+            {!loading && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 20
+              }}>
+                {visibleCases.map(caseItem => {
+                  const nextStatus = nextStatuses[caseItem.status]
+
+                  const ambulanceStatus =
+                    ambulanceStatuses[caseItem.ambulance_id]
+
+                  const canReturn =
+                    ['handed_over', 'in_treatment', 'payment_pending', 'paid'].includes(
+                      caseItem.status
+                    ) &&
+                    ['dispatched', 'en_route', 'returning'].includes(
+                      ambulanceStatus
+                    )
+
+                  const isBusy = updatingCase !== null
+
+                  return (
+                    <article
+                      key={caseItem.id}
+                      style={{
+                        ...styles.card,
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div style={{
+                        height: 4,
+                        background: COLORS.red
+                      }} />
+
+                      <div style={{
+                        padding: 'clamp(20px, 4vw, 28px)'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          flexWrap: 'wrap',
+                          gap: 16,
+                          marginBottom: 20
+                        }}>
+                          <div>
+                            <p style={styles.eyebrow}>
+                              EMERGENCY CASE #{caseItem.id}
+                            </p>
+
+                            <h3 style={{
+                              color: COLORS.navy,
+                              fontSize: 22,
+                              fontWeight: 800,
+                              margin: 0
+                            }}>
+                              {caseItem.emergency_type ||
+                                'Emergency Request'}
+                            </h3>
+                          </div>
+
+                          <StatusBadge status={caseItem.status} />
+                        </div>
+
+                        <p style={{
+                          color: COLORS.muted,
+                          fontSize: 14,
+                          lineHeight: 1.8,
+                          margin: '0 0 22px'
+                        }}>
+                          {caseItem.emergency_desc ||
+                            'No emergency description provided.'}
+                        </p>
+
+                        <div style={styles.detailGrid}>
+                          <div>
+                            <p style={styles.label}>PATIENT</p>
+                            <strong>
+                              {caseItem.patient_name ||
+                                `Patient ${caseItem.patient_id}`}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <p style={styles.label}>SEVERITY</p>
+                            <strong>
+                              {formatStatus(caseItem.severity)}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <p style={styles.label}>CURRENT STATUS</p>
+                            <StatusBadge status={caseItem.status} />
+                          </div>
+                        </div>
+
+                        {caseItem.status === 'requested' && (
+                          <section style={styles.actionPanel}>
+                            <h4 style={{
+                              color: COLORS.navy,
+                              margin: '0 0 10px'
+                            }}>
+                              Dispatch Ambulance
+                            </h4>
+
+                            <p style={styles.sectionDescription}>
+                              Select an available ambulance with an
+                              assigned driver.
+                            </p>
+
+                            {ambulances.length > 0 ? (
+                              <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: 12,
+                                marginTop: 17
+                              }}>
+                                <select
+                                  aria-label={`Ambulance for case ${caseItem.id}`}
+                                  value={
+                                    selectedAmbulances[caseItem.id] || ''
+                                  }
+                                  onChange={e =>
+                                    setSelectedAmbulances(current => ({
+                                      ...current,
+                                      [caseItem.id]: e.target.value
+                                    }))
+                                  }
+                                  style={styles.select}
+                                >
+                                  <option value="">
+                                    Select available ambulance
+                                  </option>
+
+                                  {ambulances.map(ambulance => (
+                                    <option
+                                      key={ambulance.id}
+                                      value={ambulance.id}
+                                      disabled={!ambulance.driver_id}
+                                    >
+                                      {ambulance.plate_number}
+                                      {ambulance.driver_id
+                                        ? ` - Driver #${ambulance.driver_id}`
+                                        : ' - No driver assigned'}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <button
+                                  type="button"
+                                  style={styles.button}
+                                  disabled={
+                                    dispatchingCase !== null ||
+                                    !selectedAmbulances[caseItem.id]
+                                  }
+                                  onClick={() =>
+                                    handleDispatch(caseItem.id)
+                                  }
+                                >
+                                  {dispatchingCase === caseItem.id
+                                    ? 'Dispatching...'
+                                    : 'Dispatch Ambulance →'}
+                                </button>
+                              </div>
+                            ) : (
+                              <p style={styles.sectionDescription}>
+                                No ambulances currently available.
+                              </p>
+                            )}
+                          </section>
+                        )}
+
+                        {caseItem.ambulance_id && (
+                          <section style={{
+                            ...styles.actionPanel,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 15
+                          }}>
+                            <div>
+                              <p style={styles.label}>
+                                ASSIGNED AMBULANCE
+                              </p>
+
+                              <strong>
+                                Ambulance #{caseItem.ambulance_id}
+                              </strong>
+                            </div>
+
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 12
+                            }}>
+                              {ambulanceStatus && (
+                                <StatusBadge status={ambulanceStatus} />
+                              )}
+
+                              {canReturn && (
+                                <button
+                                  type="button"
+                                  style={{
+                                    ...styles.button,
+                                    background: '#0f766e'
+                                  }}
+                                  disabled={
+                                    returningAmbulance !== null
+                                  }
+                                  onClick={() =>
+                                    handleAmbulanceReturn(
+                                      caseItem.ambulance_id
+                                    )
+                                  }
+                                >
+                                  {returningAmbulance ===
+                                  caseItem.ambulance_id
+                                    ? 'Confirming...'
+                                    : 'Confirm Ambulance Return'}
+                                </button>
+                              )}
+                            </div>
+                          </section>
+                        )}
+
+                        {['dispatched', 'picked_up'].includes(
+                          caseItem.status
+                        ) && (
+                          <section style={styles.actionPanel}>
+                            <h4 style={{
+                              color: COLORS.navy,
+                              margin: '0 0 9px'
+                            }}>
+                              Awaiting Ambulance Driver
+                            </h4>
+
+                            <p style={styles.sectionDescription}>
+                              {caseItem.status === 'dispatched'
+                                ? 'The ambulance has been dispatched. The driver must confirm patient pickup from the Driver Dashboard.'
+                                : 'The patient has been picked up. The driver must confirm arrival at the hospital.'}
+                            </p>
+
+                            <button
+                              type="button"
+                              style={{
+                                ...styles.secondaryButton,
+                                marginTop: 15
+                              }}
+                              onClick={() => loadDashboard(false)}
+                            >
+                              ↻ Refresh Status
+                            </button>
+                          </section>
+                        )}
+
+                        {caseItem.status === 'arrived_at_hospital' && (
+                          <section style={styles.actionPanel}>
+                            <h4 style={{
+                              color: COLORS.navy,
+                              margin: '0 0 9px'
+                            }}>
+                              Patient Handover
+                            </h4>
+
+                            <p style={styles.sectionDescription}>
+                              The driver has confirmed hospital
+                              arrival. Confirm that the patient has
+                              been handed over before treatment begins.
+                            </p>
+
+                            <button
+                              type="button"
+                              style={{
+                                ...styles.button,
+                                marginTop: 15
+                              }}
+                              disabled={isBusy}
+                              onClick={() =>
+                                handleHandover(caseItem.id)
+                              }
+                            >
+                              {updatingCase === caseItem.id
+                                ? 'Confirming...'
+                                : 'Confirm Patient Handover →'}
+                            </button>
+                          </section>
+                        )}
+
+                        {caseItem.status === 'payment_pending' && (
+                          <section style={{
+                            ...styles.actionPanel,
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a'
+                          }}>
+                            <h4 style={{
+                              color: '#92400e',
+                              margin: '0 0 9px'
+                            }}>
+                              Awaiting Payment Verification
+                            </h4>
+
+                            <p style={{
+                              ...styles.sectionDescription,
+                              color: '#92400e'
+                            }}>
+                              The patient must complete payment.
+                              Hospital staff cannot manually mark
+                              the case as paid. Payment verification
+                              is handled by the backend.
+                            </p>
+
+                            <button
+                              type="button"
+                              style={{
+                                ...styles.secondaryButton,
+                                marginTop: 15
+                              }}
+                              onClick={() => loadDashboard(false)}
+                            >
+                              ↻ Refresh Payment Status
+                            </button>
+                          </section>
+                        )}
+
+                        {nextStatus && (
+                          <section style={{
+                            borderTop: `1px solid ${COLORS.border}`,
+                            marginTop: 24,
+                            paddingTop: 21
+                          }}>
+                            <h4 style={{
+                              color: COLORS.navy,
+                              margin: '0 0 9px'
+                            }}>
+                              Case Management
+                            </h4>
+
+                            <p style={styles.sectionDescription}>
+                              Current status:{' '}
+                              <strong>
+                                {formatStatus(caseItem.status)}
+                              </strong>
+                            </p>
+
+                            <button
+                              type="button"
+                              style={{
+                                ...styles.button,
+                                marginTop: 15
+                              }}
+                              disabled={isBusy}
+                              onClick={() =>
+                                handleStatusUpdate(
+                                  caseItem.id,
+                                  nextStatus
+                                )
+                              }
+                            >
+                              {updatingCase === caseItem.id
+                                ? 'Updating...'
+                                : nextStatus === 'closed'
+                                  ? 'Close Case →'
+                                  : `Mark as ${formatStatus(nextStatus)} →`}
+                            </button>
+                          </section>
+                        )}
+
+                        {caseItem.status === 'closed' && (
+                          <div style={{
+                            marginTop: 22,
+                            padding: 16,
+                            background: '#ecfdf5',
+                            color: '#047857',
+                            borderRadius: 10,
+                            fontWeight: 700
+                          }}>
+                            ✓ Case completed and closed.
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
 
         <footer style={styles.footer}>
           © {new Date().getFullYear()} MediRescue
@@ -1078,5 +1425,3 @@ function StaffDashboard({ view = 'dashboard' }) {
     </div>
   )
 }
-
-export default StaffDashboard

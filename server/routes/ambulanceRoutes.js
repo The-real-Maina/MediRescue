@@ -26,7 +26,7 @@ router.get(
     try {
       const hospitalId = req.user.hospital_id;
 
-      if (!hospitalId) {
+      if (!validId(hospitalId)) {
         return res.status(403).json({
           error: 'Staff account is not assigned to a hospital'
         });
@@ -157,8 +157,6 @@ router.patch(
     }
 
     try {
-      // The database determines which ambulance belongs
-      // to this authenticated driver.
       const [result] = await pool.query(
         `
         UPDATE ambulance AS a
@@ -272,7 +270,7 @@ router.get(
       });
     }
 
-    if (!hospitalId) {
+    if (!validId(hospitalId)) {
       return res.status(403).json({
         error: 'Staff account is not assigned to a hospital'
       });
@@ -330,7 +328,7 @@ router.patch(
       });
     }
 
-    if (!hospitalId) {
+    if (!validId(hospitalId)) {
       return res.status(403).json({
         error: 'Staff account is not assigned to a hospital'
       });
@@ -342,6 +340,7 @@ router.patch(
       connection = await pool.getConnection();
       await connection.beginTransaction();
 
+      // Lock the ambulance during the return operation.
       const [ambulances] = await connection.query(
         `
         SELECT
@@ -366,6 +365,7 @@ router.patch(
 
       const ambulance = ambulances[0];
 
+      // Only ambulances currently on dispatch can be returned.
       if (
         !['dispatched', 'en_route', 'returning'].includes(
           ambulance.status
@@ -378,6 +378,14 @@ router.patch(
         });
       }
 
+      // Prevent release if the ambulance still has a patient
+      // awaiting pickup or being transported.
+      //
+      // Once a case reaches handed_over, hospital staff have
+      // received the patient, so transport is complete.
+      //
+      // Treatment and payment are hospital workflows and
+      // must not prevent the ambulance from returning to service.
       const [activeCases] = await connection.query(
         `
         SELECT
@@ -385,11 +393,11 @@ router.patch(
           status
         FROM \`case\`
         WHERE ambulance_id = ?
-          AND status NOT IN (
-            'in_treatment',
-            'payment_pending',
-            'paid',
-            'closed'
+          AND status IN (
+            'requested',
+            'dispatched',
+            'picked_up',
+            'arrived_at_hospital'
           )
         LIMIT 1
         `,
@@ -405,7 +413,9 @@ router.patch(
         });
       }
 
-      await connection.query(
+      // Patient transport has finished.
+      // Make the ambulance available for another dispatch.
+      const [result] = await connection.query(
         `
         UPDATE ambulance
         SET status = 'available'
@@ -414,6 +424,14 @@ router.patch(
         `,
         [ambulanceId, hospitalId]
       );
+
+      if (result.affectedRows !== 1) {
+        await connection.rollback();
+
+        return res.status(409).json({
+          error: 'Unable to update ambulance status'
+        });
+      }
 
       await connection.commit();
 
