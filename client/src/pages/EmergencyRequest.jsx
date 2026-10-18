@@ -1,5 +1,5 @@
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 // ==========================================
@@ -230,6 +230,43 @@ const styles = {
     lineHeight: 1.6
   },
 
+  hospitalCard: {
+    marginTop: 18,
+    padding: 22,
+    background: '#eff6ff',
+    border: '1px solid #bfdbfe',
+    borderLeft: '5px solid #2563eb',
+    borderRadius: 12
+  },
+
+  hospitalHeading: {
+    color: '#1e40af',
+    fontSize: 16,
+    fontWeight: 800,
+    margin: '0 0 14px'
+  },
+
+  hospitalName: {
+    color: '#10243a',
+    fontSize: 19,
+    fontWeight: 800,
+    margin: '0 0 12px'
+  },
+
+  hospitalDetail: {
+    color: '#334155',
+    fontSize: 14,
+    lineHeight: 1.7,
+    margin: '7px 0'
+  },
+
+  hospitalNotice: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 1.7,
+    margin: '15px 0 0'
+  },
+
   error: {
     background: '#fee2e2',
     color: '#991b1b',
@@ -279,6 +316,8 @@ const styles = {
 function EmergencyRequest() {
   const navigate = useNavigate()
 
+  const locationRequestRef = useRef(0)
+
   const initialFormData = {
     emergency_type: '',
     emergency_desc: '',
@@ -288,11 +327,18 @@ function EmergencyRequest() {
   }
 
   const [formData, setFormData] = useState(initialFormData)
+
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
   const [loading, setLoading] = useState(false)
+
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationFound, setLocationFound] = useState(false)
+
+  const [nearestHospital, setNearestHospital] = useState(null)
+  const [hospitalLoading, setHospitalLoading] = useState(false)
+  const [hospitalError, setHospitalError] = useState('')
 
   // ==========================================
   // HANDLE FORM INPUT
@@ -308,35 +354,148 @@ function EmergencyRequest() {
   }
 
   // ==========================================
+  // FETCH NEAREST HOSPITAL PREVIEW
+  // ==========================================
+
+  const fetchNearestHospital = async (
+    latitude,
+    longitude,
+    requestId
+  ) => {
+    setHospitalLoading(true)
+    setHospitalError('')
+    setNearestHospital(null)
+
+    try {
+      const token = localStorage.getItem('medirescue_token')
+
+      if (!token) {
+        navigate('/login')
+        return
+      }
+
+      const response = await fetch(
+        'http://localhost:5000/api/cases/nearest-hospital',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            pickup_lat: latitude,
+            pickup_lng: longitude
+          })
+        }
+      )
+
+      const data = await response.json()
+
+      // Ignore results from older GPS requests.
+      if (requestId !== locationRequestRef.current) {
+        return
+      }
+
+      if (response.status === 401) {
+        navigate('/login')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Unable to identify the nearest hospital.'
+        )
+      }
+
+      if (!data.hospital?.id || !data.hospital?.name) {
+        throw new Error(
+          'The hospital preview response is incomplete.'
+        )
+      }
+
+      setNearestHospital({
+        id: data.hospital.id,
+        name: data.hospital.name,
+        location: data.hospital.location,
+        distance_km: data.distance_km
+      })
+
+    } catch (err) {
+      if (requestId === locationRequestRef.current) {
+        setHospitalError(
+          err.message || 'Unable to identify the nearest hospital.'
+        )
+      }
+    } finally {
+      if (requestId === locationRequestRef.current) {
+        setHospitalLoading(false)
+      }
+    }
+  }
+
+  // ==========================================
   // GET CURRENT GPS LOCATION
   // ==========================================
 
   const getCurrentLocation = () => {
+    const requestId = ++locationRequestRef.current
+
     setError('')
+    setSuccess('')
+
     setLocationLoading(true)
     setLocationFound(false)
+
+    setNearestHospital(null)
+    setHospitalLoading(false)
+    setHospitalError('')
+
+    setFormData((current) => ({
+      ...current,
+      pickup_lat: '',
+      pickup_lng: ''
+    }))
 
     if (!navigator.geolocation) {
       setError(
         'Location services are not supported by this browser.'
       )
+
       setLocationLoading(false)
       return
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (requestId !== locationRequestRef.current) {
+          return
+        }
+
+        const latitude = position.coords.latitude
+        const longitude = position.coords.longitude
+
         setFormData((current) => ({
           ...current,
-          pickup_lat: position.coords.latitude,
-          pickup_lng: position.coords.longitude
+          pickup_lat: latitude,
+          pickup_lng: longitude
         }))
 
         setLocationFound(true)
         setLocationLoading(false)
+
+        // Automatically preview the nearest hospital.
+        fetchNearestHospital(
+          latitude,
+          longitude,
+          requestId
+        )
       },
 
       (locationError) => {
+        if (requestId !== locationRequestRef.current) {
+          return
+        }
+
         setLocationLoading(false)
         setLocationFound(false)
 
@@ -370,7 +529,7 @@ function EmergencyRequest() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (loading) return
+    if (loading || locationLoading) return
 
     setError('')
     setSuccess('')
@@ -438,12 +597,14 @@ function EmergencyRequest() {
         )
       }
 
-      // DISPLAY HOSPITAL AND PAYMENT DETAILS
+      // Use the hospital returned by the actual
+      // case creation endpoint, not the preview.
       const hospitalName =
-        data.hospital?.name || 'Nearest Hospital'
+        data.hospital?.name || 'Hospital name unavailable'
 
       const distance =
-        data.distance_km !== undefined
+        data.distance_km !== undefined &&
+        data.distance_km !== null
           ? `${data.distance_km} km away`
           : ''
 
@@ -465,14 +626,20 @@ function EmergencyRequest() {
       setSuccess(
         `Emergency request sent successfully. ` +
         `Case ID: ${data.case_id}. ` +
-        `${hospitalName} has been selected as your nearest hospital` +
+        `Assigned hospital: ${hospitalName}` +
         `${distance ? ` (${distance})` : ''}. ` +
         `Estimated emergency service charge: ${formattedAmount}. ` +
         `Emergency assistance does not require advance payment.`
       )
 
+      // Invalidate any outstanding preview request.
+      locationRequestRef.current += 1
+
       setFormData(initialFormData)
       setLocationFound(false)
+      setNearestHospital(null)
+      setHospitalError('')
+      setHospitalLoading(false)
 
     } catch (err) {
       setError(
@@ -492,6 +659,7 @@ function EmergencyRequest() {
           <h2 style={styles.brand}>
             ✚ MediRescue
           </h2>
+
           <div style={styles.portal}>
             EMERGENCY RESPONSE PORTAL
           </div>
@@ -572,6 +740,7 @@ function EmergencyRequest() {
             aria-live="polite"
           >
             <strong>Emergency Request Submitted</strong>
+
             <div>{success}</div>
 
             <button
@@ -628,12 +797,22 @@ function EmergencyRequest() {
                   <option value="">
                     Select emergency type
                   </option>
-                  <option value="Accident">Accident</option>
+
+                  <option value="Accident">
+                    Accident
+                  </option>
+
                   <option value="Medical Emergency">
                     Medical Emergency
                   </option>
-                  <option value="Injury">Injury</option>
-                  <option value="Other">Other</option>
+
+                  <option value="Injury">
+                    Injury
+                  </option>
+
+                  <option value="Other">
+                    Other
+                  </option>
                 </select>
               </div>
 
@@ -672,10 +851,21 @@ function EmergencyRequest() {
                   style={styles.input}
                   required
                 >
-                  <option value="low">Low</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
+                  <option value="low">
+                    Low
+                  </option>
+
+                  <option value="moderate">
+                    Moderate
+                  </option>
+
+                  <option value="high">
+                    High
+                  </option>
+
+                  <option value="critical">
+                    Critical
+                  </option>
                 </select>
 
                 <p style={styles.helpText}>
@@ -719,6 +909,7 @@ function EmergencyRequest() {
                       : '📍 Use My Current Location'}
                 </button>
 
+                {/* LOCATION SUCCESS */}
                 {locationFound && (
                   <div
                     style={styles.locationSuccess}
@@ -727,6 +918,66 @@ function EmergencyRequest() {
                     ✓ Your location has been detected
                     successfully and is ready to be
                     submitted with your request.
+                  </div>
+                )}
+
+                {/* HOSPITAL LOADING */}
+                {hospitalLoading && (
+                  <p
+                    style={styles.helpText}
+                    role="status"
+                  >
+                    🔎 Identifying your nearest hospital...
+                  </p>
+                )}
+
+                {/* HOSPITAL ERROR */}
+                {hospitalError && (
+                  <div
+                    style={{
+                      ...styles.error,
+                      marginTop: 14,
+                      marginBottom: 0
+                    }}
+                    role="alert"
+                  >
+                    {hospitalError}
+                  </div>
+                )}
+
+                {/* NEAREST HOSPITAL PREVIEW */}
+                {nearestHospital && (
+                  <div style={styles.hospitalCard}>
+                    <h3 style={styles.hospitalHeading}>
+                      🏥 Nearest Hospital Identified
+                    </h3>
+
+                    <p style={styles.hospitalName}>
+                      {nearestHospital.name}
+                    </p>
+
+                    <p style={styles.hospitalDetail}>
+                      📍 {nearestHospital.location}
+                    </p>
+
+                    {nearestHospital.distance_km !== undefined &&
+                      nearestHospital.distance_km !== null && (
+                        <p style={styles.hospitalDetail}>
+                          📏 Distance:{' '}
+                          <strong>
+                            {nearestHospital.distance_km} km
+                          </strong>
+                          {' '}(straight-line)
+                        </p>
+                      )}
+
+                    <p style={styles.hospitalNotice}>
+                      This is the nearest hospital
+                      identified from your GPS location
+                      among hospitals registered in
+                      MediRescue. Your emergency request
+                      has not been submitted yet.
+                    </p>
                   </div>
                 )}
 

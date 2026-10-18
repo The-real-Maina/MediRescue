@@ -1,6 +1,107 @@
 
 const pool = require('../config/db');
 
+/**
+ * PREVIEW NEAREST HOSPITAL
+ * Does not create an emergency case or dispatch an ambulance.
+ */
+exports.getNearestHospital = async (req, res) => {
+  const { pickup_lat, pickup_lng } = req.body || {};
+
+  if (
+    pickup_lat === undefined ||
+    pickup_lng === undefined ||
+    pickup_lat === null ||
+    pickup_lng === null ||
+    pickup_lat === '' ||
+    pickup_lng === ''
+  ) {
+    return res.status(400).json({
+      error: 'Patient GPS coordinates are required'
+    });
+  }
+
+  const patientLat = Number(pickup_lat);
+  const patientLng = Number(pickup_lng);
+
+  if (
+    !Number.isFinite(patientLat) ||
+    !Number.isFinite(patientLng) ||
+    patientLat < -90 ||
+    patientLat > 90 ||
+    patientLng < -180 ||
+    patientLng > 180
+  ) {
+    return res.status(400).json({
+      error: 'Invalid patient GPS coordinates'
+    });
+  }
+
+  try {
+    const [hospitals] = await pool.query(`
+      SELECT id, name, location, latitude, longitude
+      FROM hospital
+      WHERE latitude IS NOT NULL
+        AND longitude IS NOT NULL
+    `);
+
+    if (hospitals.length === 0) {
+      return res.status(404).json({
+        error: 'No hospitals with location information were found'
+      });
+    }
+
+    const toRadians = degrees => degrees * (Math.PI / 180);
+    const earthRadiusKm = 6371;
+
+    let nearestHospital = null;
+    let shortestDistance = Infinity;
+
+    for (const hospital of hospitals) {
+      const hospitalLat = Number(hospital.latitude);
+      const hospitalLng = Number(hospital.longitude);
+
+      const latDifference = toRadians(hospitalLat - patientLat);
+      const lngDifference = toRadians(hospitalLng - patientLng);
+
+      const a =
+        Math.sin(latDifference / 2) ** 2 +
+        Math.cos(toRadians(patientLat)) *
+        Math.cos(toRadians(hospitalLat)) *
+        Math.sin(lngDifference / 2) ** 2;
+
+      const c = 2 * Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1 - a)
+      );
+
+      const distance = earthRadiusKm * c;
+
+      if (distance < shortestDistance) {
+        shortestDistance = distance;
+        nearestHospital = hospital;
+      }
+    }
+
+    return res.status(200).json({
+      message: 'Nearest hospital identified',
+      hospital: {
+        id: nearestHospital.id,
+        name: nearestHospital.name,
+        location: nearestHospital.location
+      },
+      distance_km: Number(shortestDistance.toFixed(2))
+    });
+
+  } catch (err) {
+    console.error('Nearest hospital preview error:', err);
+
+    return res.status(500).json({
+      error: 'Failed to identify nearest hospital'
+    });
+  }
+};
+
 // ==========================================
 // CREATE EMERGENCY CASE
 // ==========================================
