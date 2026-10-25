@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -10,6 +9,10 @@ import { useNavigate } from 'react-router-dom'
 const API_URL = 'http://localhost:5000/api'
 const POLL_INTERVAL = 10000
 const MAX_CHECKS = 12
+
+// The simulate section only exists while running `npm run dev`.
+// The server also refuses simulation unless it is enabled in .env.
+const SIMULATION_UI = import.meta.env.DEV
 
 const styles = {
   page: {
@@ -306,6 +309,51 @@ const styles = {
     lineHeight: 1.8
   },
 
+  simulation: {
+    background: '#fffbeb',
+    border: '1px solid #fde68a',
+    borderLeft: '5px solid #d97706',
+    borderRadius: 12,
+    padding: '20px 22px',
+    marginTop: 28,
+    color: '#92400e',
+    fontSize: 13,
+    lineHeight: 1.8
+  },
+
+  simulationButtons: {
+    display: 'flex',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginTop: 14
+  },
+
+  simulateSuccess: {
+    flex: 1,
+    minWidth: 180,
+    padding: '13px 16px',
+    background: '#d97706',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 9,
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer'
+  },
+
+  simulateFailed: {
+    flex: 1,
+    minWidth: 180,
+    padding: '13px 16px',
+    background: '#ffffff',
+    color: '#92400e',
+    border: '1px solid #d97706',
+    borderRadius: 9,
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer'
+  },
+
   footer: {
     color: '#94a3b8',
     fontSize: 12,
@@ -350,6 +398,10 @@ function PayNow() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [result, setResult] = useState(null)
+
+  // Development simulation state.
+  const [simulating, setSimulating] = useState('')
+  const [simMessage, setSimMessage] = useState(null)
 
   const timerRef = useRef(null)
   const activeRef = useRef(false)
@@ -744,6 +796,87 @@ function PayNow() {
   }
 
   // ==========================================
+  // DEVELOPMENT: SIMULATE PAYMENT
+  // No money moves. Records a simulated payment
+  // through POST /api/mpesa/simulate.
+  // ==========================================
+
+  const handleSimulate = async (outcome) => {
+    if (simulating || loading || checking) return
+    if (!selectedCase) return
+
+    const token = getToken()
+
+    if (!token) {
+      navigate('/login')
+      return
+    }
+
+    const simulatedCaseId = Number(selectedCase.id)
+
+    setSimulating(outcome)
+    setSimMessage(null)
+    setError('')
+
+    try {
+      const response = await fetch(
+        `${API_URL}/mpesa/simulate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            case_id: simulatedCaseId,
+            outcome
+          })
+        }
+      )
+
+      const data = await response.json()
+
+      if (response.status === 401) {
+        navigate('/login')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Payment simulation failed'
+        )
+      }
+
+      if (!mountedRef.current) return
+
+      setSimMessage({
+        type: outcome === 'success' ? 'completed' : 'failed',
+        text:
+          outcome === 'success'
+            ? `Simulated payment recorded for Case #${simulatedCaseId}: ` +
+              `KSh ${formatAmount(data.amount)}. No money was transferred. ` +
+              'The case is now paid and ready for hospital staff to close.'
+            : `Simulated failed payment recorded for Case #${simulatedCaseId}. ` +
+              'The case is still awaiting payment, so you can try again.'
+      })
+
+      await loadCases()
+
+    } catch (err) {
+      if (mountedRef.current) {
+        setSimMessage({
+          type: 'failed',
+          text: err.message || 'Payment simulation failed'
+        })
+      }
+    } finally {
+      if (mountedRef.current) {
+        setSimulating('')
+      }
+    }
+  }
+
+  // ==========================================
   // CASE SELECTION
   // ==========================================
 
@@ -753,6 +886,7 @@ function PayNow() {
     setResult(null)
     setNotice('')
     setError('')
+    setSimMessage(null)
   }
 
   // ==========================================
@@ -786,6 +920,13 @@ function PayNow() {
     checking ||
     !selectedCase ||
     (result && paymentStatus !== 'failed')
+
+  const simulationDisabled =
+    Boolean(simulating) ||
+    loading ||
+    checking ||
+    loadingCases ||
+    !selectedCase
 
   // ==========================================
   // PAGE INTERFACE
@@ -1166,6 +1307,80 @@ function PayNow() {
               )}
           </form>
         </section>
+
+        {/* DEVELOPMENT PAYMENT SIMULATION */}
+        {SIMULATION_UI && (selectedCase || simMessage) && (
+          <section style={styles.simulation}>
+            <strong>
+              Development only: simulate a payment
+            </strong>
+
+            <p style={{ margin: '8px 0 0' }}>
+              Records a test payment for the selected
+              case without sending an M-Pesa request.
+              No money moves. This section is not
+              included in a production build.
+            </p>
+
+            {selectedCase && (
+              <div style={styles.simulationButtons}>
+                <button
+                  type="button"
+                  disabled={simulationDisabled}
+                  onClick={() =>
+                    handleSimulate('success')
+                  }
+                  style={{
+                    ...styles.simulateSuccess,
+                    opacity: simulationDisabled ? 0.6 : 1,
+                    cursor: simulationDisabled
+                      ? 'not-allowed'
+                      : 'pointer'
+                  }}
+                >
+                  {simulating === 'success'
+                    ? 'Recording...'
+                    : `Simulate successful payment for Case #${selectedCase.id}`}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={simulationDisabled}
+                  onClick={() =>
+                    handleSimulate('failed')
+                  }
+                  style={{
+                    ...styles.simulateFailed,
+                    opacity: simulationDisabled ? 0.6 : 1,
+                    cursor: simulationDisabled
+                      ? 'not-allowed'
+                      : 'pointer'
+                  }}
+                >
+                  {simulating === 'failed'
+                    ? 'Recording...'
+                    : 'Simulate failed payment'}
+                </button>
+              </div>
+            )}
+
+            {simMessage && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  ...styles.statusBox,
+                  ...statusColors[simMessage.type],
+                  marginTop: 16,
+                  marginBottom: 0,
+                  fontSize: 13
+                }}
+              >
+                {simMessage.text}
+              </div>
+            )}
+          </section>
+        )}
 
         <section style={styles.sandbox}>
           <strong>

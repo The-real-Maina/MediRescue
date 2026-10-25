@@ -1,6 +1,6 @@
-
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import CaseChat from '../components/CaseChat'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const AMBULANCE_API = `${API}/ambulances`
@@ -119,6 +119,23 @@ function EmergencyCard({ emergency, onAction, busy }) {
               `Patient #${emergency.patient_id}`}
           </strong>
         </div>
+
+        {emergency.patient_phone && (
+          <div>
+            <p style={{ color: palette.muted, fontSize: 12 }}>
+              Patient Phone
+            </p>
+            <a
+              href={`tel:${emergency.patient_phone}`}
+              style={{
+                color: '#1d4ed8',
+                fontWeight: 700
+              }}
+            >
+              {emergency.patient_phone}
+            </a>
+          </div>
+        )}
 
         <div>
           <p style={{ color: palette.muted, fontSize: 12 }}>
@@ -268,6 +285,11 @@ function EmergencyCard({ emergency, onAction, busy }) {
           Hospital arrival confirmed. Hospital Staff must
           complete patient handover.
         </p>
+      )}
+
+      {/* Chat with the patient while the ambulance is on its way */}
+      {status === 'dispatched' && (
+        <CaseChat caseId={emergency.id} />
       )}
 
       {nextAction && (

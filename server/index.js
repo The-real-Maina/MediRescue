@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 
 const express = require('express');
@@ -32,6 +31,9 @@ app.use('/api/auth', require('./routes/authRoutes'));
 
 // Emergency cases
 app.use('/api/cases', require('./routes/caseRoutes'));
+
+// Patient and driver chat on a dispatched case
+app.use('/api/messages', require('./routes/messageRoutes'));
 
 // Ambulance management
 app.use('/api/ambulances', require('./routes/ambulanceRoutes'));

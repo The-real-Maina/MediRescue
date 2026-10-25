@@ -1,5 +1,49 @@
-
 const pool = require('../config/db');
+
+// Must match hospital_service_prices.service_name exactly.
+const EMERGENCY_SERVICE_NAME = 'Emergency Medical Response';
+
+// ==========================================
+// HELPER: FIND NEAREST HOSPITAL
+// Haversine distance between the patient and
+// every hospital that has coordinates.
+// ==========================================
+
+function findNearestHospital(hospitals, patientLat, patientLng) {
+  const toRadians = degrees => degrees * (Math.PI / 180);
+  const earthRadiusKm = 6371;
+
+  let nearestHospital = null;
+  let shortestDistance = Infinity;
+
+  for (const hospital of hospitals) {
+    const hospitalLat = Number(hospital.latitude);
+    const hospitalLng = Number(hospital.longitude);
+
+    const latDifference = toRadians(hospitalLat - patientLat);
+    const lngDifference = toRadians(hospitalLng - patientLng);
+
+    const a =
+      Math.sin(latDifference / 2) ** 2 +
+      Math.cos(toRadians(patientLat)) *
+      Math.cos(toRadians(hospitalLat)) *
+      Math.sin(lngDifference / 2) ** 2;
+
+    const c = 2 * Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    );
+
+    const distance = earthRadiusKm * c;
+
+    if (distance < shortestDistance) {
+      shortestDistance = distance;
+      nearestHospital = hospital;
+    }
+  }
+
+  return { nearestHospital, shortestDistance };
+}
 
 /**
  * PREVIEW NEAREST HOSPITAL
@@ -51,37 +95,8 @@ exports.getNearestHospital = async (req, res) => {
       });
     }
 
-    const toRadians = degrees => degrees * (Math.PI / 180);
-    const earthRadiusKm = 6371;
-
-    let nearestHospital = null;
-    let shortestDistance = Infinity;
-
-    for (const hospital of hospitals) {
-      const hospitalLat = Number(hospital.latitude);
-      const hospitalLng = Number(hospital.longitude);
-
-      const latDifference = toRadians(hospitalLat - patientLat);
-      const lngDifference = toRadians(hospitalLng - patientLng);
-
-      const a =
-        Math.sin(latDifference / 2) ** 2 +
-        Math.cos(toRadians(patientLat)) *
-        Math.cos(toRadians(hospitalLat)) *
-        Math.sin(lngDifference / 2) ** 2;
-
-      const c = 2 * Math.atan2(
-        Math.sqrt(a),
-        Math.sqrt(1 - a)
-      );
-
-      const distance = earthRadiusKm * c;
-
-      if (distance < shortestDistance) {
-        shortestDistance = distance;
-        nearestHospital = hospital;
-      }
-    }
+    const { nearestHospital, shortestDistance } =
+      findNearestHospital(hospitals, patientLat, patientLng);
 
     return res.status(200).json({
       message: 'Nearest hospital identified',
@@ -171,46 +186,31 @@ exports.createCase = async (req, res) => {
       });
     }
 
-    const toRadians = degrees => degrees * (Math.PI / 180);
-    const earthRadiusKm = 6371;
-
-    let nearestHospital = null;
-    let shortestDistance = Infinity;
-
-    for (const hospital of hospitals) {
-      const hospitalLat = Number(hospital.latitude);
-      const hospitalLng = Number(hospital.longitude);
-
-      const latDifference = toRadians(hospitalLat - patientLat);
-      const lngDifference = toRadians(hospitalLng - patientLng);
-
-      const a =
-        Math.sin(latDifference / 2) ** 2 +
-        Math.cos(toRadians(patientLat)) *
-        Math.cos(toRadians(hospitalLat)) *
-        Math.sin(lngDifference / 2) ** 2;
-
-      const c = 2 * Math.atan2(
-        Math.sqrt(a),
-        Math.sqrt(1 - a)
-      );
-
-      const distance = earthRadiusKm * c;
-
-      if (distance < shortestDistance) {
-        shortestDistance = distance;
-        nearestHospital = hospital;
-      }
-    }
+    const { nearestHospital, shortestDistance } =
+      findNearestHospital(hospitals, patientLat, patientLng);
 
     const [prices] = await connection.query(`
       SELECT amount
       FROM hospital_service_prices
       WHERE hospital_id = ?
-        AND service_name = 'Emergency Response'
+        AND service_name = ?
         AND severity = ?
       LIMIT 1
-    `, [nearestHospital.id, normalizedSeverity]);
+    `, [
+      nearestHospital.id,
+      EMERGENCY_SERVICE_NAME,
+      normalizedSeverity
+    ]);
+
+    // A missing price must never block a patient who needs help,
+    // but it should be visible in the server log.
+    if (prices.length === 0) {
+      console.warn(
+        `No "${EMERGENCY_SERVICE_NAME}" price found for hospital ` +
+        `${nearestHospital.id} and severity "${normalizedSeverity}". ` +
+        'Case will be created without a payment amount.'
+      );
+    }
 
     const paymentAmount = prices.length > 0
       ? Number(prices[0].amount)
@@ -419,7 +419,7 @@ exports.updateCaseStatus = async (req, res) => {
     await connection.beginTransaction();
 
     const [cases] = await connection.query(`
-      SELECT id, status, hospital_id, ambulance_id
+      SELECT id, status, hospital_id, ambulance_id, severity, payment_amount
       FROM \`case\`
       WHERE id = ? AND hospital_id = ?
       FOR UPDATE
@@ -444,6 +444,45 @@ exports.updateCaseStatus = async (req, res) => {
       return res.status(409).json({
         error: `Cannot change case status from ${emergencyCase.status} to ${status}`
       });
+    }
+
+    // ==========================================
+    // PAYMENT AMOUNT SAFEGUARD
+    // A case must never reach payment_pending
+    // without a charge the patient can pay.
+    // ==========================================
+
+    let amountToSet = null;
+
+    if (status === 'payment_pending') {
+      const currentAmount = Number(emergencyCase.payment_amount);
+
+      if (!Number.isFinite(currentAmount) || currentAmount <= 0) {
+        const [prices] = await connection.query(`
+          SELECT amount
+          FROM hospital_service_prices
+          WHERE hospital_id = ?
+            AND service_name = ?
+            AND severity = ?
+          LIMIT 1
+        `, [
+          hospitalId,
+          EMERGENCY_SERVICE_NAME,
+          emergencyCase.severity
+        ]);
+
+        if (prices.length === 0) {
+          await connection.rollback();
+
+          return res.status(409).json({
+            error:
+              'No price is set for this hospital and severity. ' +
+              'Set the price before moving the case to payment pending.'
+          });
+        }
+
+        amountToSet = Number(prices[0].amount);
+      }
     }
 
     // ==========================================
@@ -491,6 +530,7 @@ exports.updateCaseStatus = async (req, res) => {
       SET
         status = ?,
         staff_id = ?,
+        payment_amount = COALESCE(?, payment_amount),
         closed_at = CASE
           WHEN ? = 'closed'
           THEN COALESCE(closed_at, NOW())
@@ -500,6 +540,7 @@ exports.updateCaseStatus = async (req, res) => {
     `, [
       status,
       staffId,
+      amountToSet,
       status,
       caseId,
       hospitalId

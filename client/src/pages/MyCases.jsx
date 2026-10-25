@@ -1,11 +1,13 @@
-
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import CaseChat from '../components/CaseChat'
 
 // ==========================================
 // MEDIRESCUE — MY EMERGENCY CASES
 // LIGHT MODE — INLINE CSS
 // ==========================================
+
+const REFRESH_INTERVAL = 10000
 
 const styles = {
   page: {
@@ -329,57 +331,72 @@ function MyCases() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    const fetchCases = async () => {
-      const token = localStorage.getItem('medirescue_token')
+  // The first load shows a loading state and any error.
+  // Later refreshes run quietly in the background so a
+  // newly dispatched ambulance appears without reloading.
+  const fetchCases = useCallback(async (isFirstLoad) => {
+    const token = localStorage.getItem('medirescue_token')
 
-      if (!token) {
+    if (!token) {
+      navigate('/login')
+      return
+    }
+
+    try {
+      const response = await fetch(
+        'http://localhost:5000/api/cases',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      )
+
+      const data = await response.json()
+
+      if (response.status === 401) {
         navigate('/login')
         return
       }
 
-      try {
-        const response = await fetch(
-          'http://localhost:5000/api/cases',
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Failed to load emergency cases'
         )
+      }
 
-        const data = await response.json()
+      setCases(
+        Array.isArray(data)
+          ? data
+          : Array.isArray(data.cases)
+            ? data.cases
+            : []
+      )
 
-        if (response.status === 401) {
-          navigate('/login')
-          return
-        }
+      setError('')
 
-        if (!response.ok) {
-          throw new Error(
-            data.error || 'Failed to load emergency cases'
-          )
-        }
-
-        setCases(
-          Array.isArray(data)
-            ? data
-            : Array.isArray(data.cases)
-              ? data.cases
-              : []
-        )
-
-      } catch (err) {
+    } catch (err) {
+      if (isFirstLoad) {
         setError(
           err.message || 'Unable to load emergency cases.'
         )
-      } finally {
+      }
+    } finally {
+      if (isFirstLoad) {
         setLoading(false)
       }
     }
-
-    fetchCases()
   }, [navigate])
+
+  useEffect(() => {
+    fetchCases(true)
+
+    const interval = setInterval(() => {
+      fetchCases(false)
+    }, REFRESH_INTERVAL)
+
+    return () => clearInterval(interval)
+  }, [fetchCases])
 
   const formatStatus = (status) => {
     if (!status) return 'Unknown'
@@ -619,6 +636,11 @@ function MyCases() {
                     </div>
 
                   </div>
+
+                  {/* CHAT WITH THE DRIVER WHILE THE AMBULANCE IS ON ITS WAY */}
+                  {caseItem.status === 'dispatched' && (
+                    <CaseChat caseId={caseId} />
+                  )}
                 </article>
               )
             })}
