@@ -6,6 +6,7 @@ import PatientDashboard from './pages/PatientDashboard'
 import EmergencyRequest from './pages/EmergencyRequest'
 import MyCases from './pages/MyCases'
 import PayNow from './pages/PayNow'
+import HealthProfile from './pages/HealthProfile'
 import StaffDashboard from './pages/StaffDashboard'
 import DriverDashboard from './pages/DriverDashboard'
 import AdminDashboard from './pages/AdminDashboard'
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/patient-dashboard" element={<PatientDashboard />} />
           <Route path="/emergency-request" element={<EmergencyRequest />} />
           <Route path="/my-cases" element={<MyCases />} />
+          <Route path="/health-profile" element={<HealthProfile />} />
           <Route path="/pay-now" element={<PayNow />} />
         </Route>
 

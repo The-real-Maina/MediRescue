@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
@@ -11,6 +10,33 @@ const { authenticate, authorize } = require('../middleware/auth');
 const validId = (value) => {
   const id = Number(value);
   return Number.isSafeInteger(id) && id > 0;
+};
+
+// Number(null) is 0, so missing coordinates must be handled first.
+const toNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+// Straight-line (haversine) distance in kilometres.
+const distanceKm = (lat1, lng1, lat2, lng2) => {
+  const toRadians = (degrees) => degrees * (Math.PI / 180);
+  const earthRadiusKm = 6371;
+
+  const latDifference = toRadians(lat2 - lat1);
+  const lngDifference = toRadians(lng2 - lng1);
+
+  const a =
+    Math.sin(latDifference / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+    Math.cos(toRadians(lat2)) *
+    Math.sin(lngDifference / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
 // ==========================================
@@ -58,6 +84,153 @@ router.get(
 
       return res.status(500).json({
         error: 'Failed to retrieve available ambulances'
+      });
+    }
+  }
+);
+
+// ==========================================
+// SUGGEST AMBULANCES FOR A CASE
+// HOSPITAL STAFF ONLY
+//
+// Lists the hospital's available ambulances that
+// have a driver, closest to the patient first.
+// This only suggests. Dispatch still goes through
+// PATCH /api/cases/:id/ambulance.
+// ==========================================
+
+router.get(
+  '/suggestions/:caseId',
+  authenticate,
+  authorize('hospital_staff'),
+  async (req, res) => {
+    const caseId = Number(req.params.caseId);
+    const hospitalId = req.user.hospital_id;
+
+    if (!validId(caseId)) {
+      return res.status(400).json({
+        error: 'Invalid case ID'
+      });
+    }
+
+    if (!validId(hospitalId)) {
+      return res.status(403).json({
+        error: 'Staff account is not assigned to a hospital'
+      });
+    }
+
+    try {
+      const [cases] = await pool.query(
+        `
+        SELECT id, status, pickup_lat, pickup_lng
+        FROM \`case\`
+        WHERE id = ?
+          AND hospital_id = ?
+        `,
+        [caseId, hospitalId]
+      );
+
+      if (cases.length === 0) {
+        return res.status(404).json({
+          error: 'Case not found for this hospital'
+        });
+      }
+
+      const emergencyCase = cases[0];
+
+      if (emergencyCase.status !== 'requested') {
+        return res.status(409).json({
+          error: 'This case is not awaiting ambulance dispatch'
+        });
+      }
+
+      const patientLat = toNumberOrNull(emergencyCase.pickup_lat);
+      const patientLng = toNumberOrNull(emergencyCase.pickup_lng);
+      const hasPickupLocation =
+        patientLat !== null && patientLng !== null;
+
+      // position_age_minutes is calculated in the database because
+      // location_updated_at is stored with UTC_TIMESTAMP().
+      const [rows] = await pool.query(
+        `
+        SELECT
+          a.id,
+          a.plate_number,
+          a.driver_id,
+          s.name AS driver_name,
+          a.current_lat,
+          a.current_lng,
+          TIMESTAMPDIFF(
+            MINUTE,
+            a.location_updated_at,
+            UTC_TIMESTAMP()
+          ) AS position_age_minutes
+        FROM ambulance AS a
+        INNER JOIN staff AS s
+          ON a.driver_id = s.id
+        WHERE a.hospital_id = ?
+          AND a.status = 'available'
+          AND s.hospital_id = a.hospital_id
+          AND s.role = 'driver'
+        `,
+        [hospitalId]
+      );
+
+      const ambulances = rows.map((row) => {
+        const lat = toNumberOrNull(row.current_lat);
+        const lng = toNumberOrNull(row.current_lng);
+
+        const distance =
+          hasPickupLocation && lat !== null && lng !== null
+            ? Number(
+                distanceKm(lat, lng, patientLat, patientLng).toFixed(2)
+              )
+            : null;
+
+        return {
+          id: row.id,
+          plate_number: row.plate_number,
+          driver_id: row.driver_id,
+          driver_name: row.driver_name,
+          distance_km: distance,
+          position_age_minutes:
+            row.position_age_minutes === null
+              ? null
+              : Number(row.position_age_minutes),
+          suggested: false
+        };
+      });
+
+      // Closest first. Ambulances with no position go last.
+      ambulances.sort((first, second) => {
+        if (first.distance_km === null && second.distance_km === null) {
+          return first.id - second.id;
+        }
+
+        if (first.distance_km === null) return 1;
+        if (second.distance_km === null) return -1;
+
+        return (
+          first.distance_km - second.distance_km ||
+          first.id - second.id
+        );
+      });
+
+      if (ambulances.length > 0 && ambulances[0].distance_km !== null) {
+        ambulances[0].suggested = true;
+      }
+
+      return res.status(200).json({
+        case_id: caseId,
+        has_pickup_location: hasPickupLocation,
+        ambulances
+      });
+
+    } catch (error) {
+      console.error('Get ambulance suggestions error:', error);
+
+      return res.status(500).json({
+        error: 'Failed to retrieve ambulance suggestions'
       });
     }
   }

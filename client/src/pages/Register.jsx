@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -8,18 +7,8 @@ const initialForm = {
   name: '',
   phone: '',
   password: '',
-  confirmPassword: '',
-  blood_type: '',
-  allergies: '',
-  chronic_conditions: '',
-  next_of_kin_name: '',
-  next_of_kin_phone: ''
+  confirmPassword: ''
 }
-
-const bloodGroups = [
-  'A+', 'A-', 'B+', 'B-',
-  'AB+', 'AB-', 'O+', 'O-'
-]
 
 const styles = {
   page: {
@@ -504,125 +493,18 @@ function Register() {
               </label>
             </section>
 
-            {/* MEDICAL INFORMATION */}
-            <section style={styles.section}>
-              <h3 style={styles.sectionTitle}>
-                Medical Information
-              </h3>
-
-              <p style={styles.sectionDescription}>
-                Optional details that may help medical
-                personnel understand your health needs.
-              </p>
-
-              <div style={styles.grid}>
-                <div>
-                  <label
-                    htmlFor="register-blood_type"
-                    style={styles.label}
-                  >
-                    Blood Group (Optional)
-                  </label>
-
-                  <select
-                    id="register-blood_type"
-                    name="blood_type"
-                    value={form.blood_type}
-                    onChange={handleChange}
-                    style={styles.input}
-                  >
-                    <option value="">
-                      Select blood group
-                    </option>
-
-                    {bloodGroups.map((group) => (
-                      <option
-                        key={group}
-                        value={group}
-                      >
-                        {group}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="register-allergies"
-                    style={styles.label}
-                  >
-                    Allergies (Optional)
-                  </label>
-
-                  <textarea
-                    id="register-allergies"
-                    name="allergies"
-                    value={form.allergies}
-                    onChange={handleChange}
-                    placeholder="Known allergies"
-                    rows={3}
-                    style={{
-                      ...styles.input,
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="register-chronic_conditions"
-                    style={styles.label}
-                  >
-                    Chronic Conditions (Optional)
-                  </label>
-
-                  <textarea
-                    id="register-chronic_conditions"
-                    name="chronic_conditions"
-                    value={form.chronic_conditions}
-                    onChange={handleChange}
-                    placeholder="Existing medical conditions"
-                    rows={3}
-                    style={{
-                      ...styles.input,
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* EMERGENCY CONTACT */}
-            <section style={styles.section}>
-              <h3 style={styles.sectionTitle}>
-                Emergency Contact
-              </h3>
-
-              <p style={styles.sectionDescription}>
-                Add your next of kin's contact details
-                if you would like them included
-                in your patient record.
-              </p>
-
-              <div style={styles.grid}>
-                {renderInput(
-                  'Next of Kin Name (Optional)',
-                  'next_of_kin_name',
-                  {
-                    placeholder: 'Full name'
-                  }
-                )}
-
-                {renderInput(
-                  'Next of Kin Phone (Optional)',
-                  'next_of_kin_phone',
-                  {
-                    type: 'tel',
-                    placeholder: 'e.g. 0712345678'
-                  }
-                )}
-              </div>
-            </section>
+            {/* HEALTH DETAILS NOTE */}
+            <p
+              style={{
+                margin: '28px 0 0',
+                color: '#64748b',
+                fontSize: 13,
+                lineHeight: 1.6
+              }}
+            >
+              After signing in, you can add your health details
+              from My Health Profile.
+            </p>
 
             {/* SUBMIT */}
             <div

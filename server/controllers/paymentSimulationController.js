@@ -1,4 +1,3 @@
-
 const pool = require('../config/db');
 
 // Simulation must be explicitly enabled in development.
@@ -71,7 +70,7 @@ exports.simulatePayment = async (req, res) => {
     const [existing] = await connection.query(
       `SELECT id FROM payment
        WHERE case_id = ?
-         AND status IN ('pending', 'completed')
+         AND status = 'completed'
        LIMIT 1
        FOR UPDATE`,
       [caseId]
@@ -80,9 +79,18 @@ exports.simulatePayment = async (req, res) => {
     if (existing.length) {
       await connection.rollback();
       return res.status(409).json({
-        error: 'A pending or completed payment already exists'
+        error: 'This case has already been paid'
       });
     }
+
+    // An unfinished earlier attempt must not block a retry.
+    await connection.query(
+      `UPDATE payment
+       SET status = 'failed'
+       WHERE case_id = ?
+         AND status = 'pending'`,
+      [caseId]
+    );
 
     const paymentStatus =
       outcome === 'success'

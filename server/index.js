@@ -35,6 +35,9 @@ app.use('/api/cases', require('./routes/caseRoutes'));
 // Patient and driver chat on a dispatched case
 app.use('/api/messages', require('./routes/messageRoutes'));
 
+// Patient health profile
+app.use('/api/health-profile', require('./routes/healthProfileRoutes'));
+
 // Ambulance management
 app.use('/api/ambulances', require('./routes/ambulanceRoutes'));
 

@@ -1,7 +1,7 @@
-
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap'
+import PatientHealthSummary from '../components/PatientHealthSummary'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -162,6 +162,16 @@ const styles = {
     border: `1px solid ${COLORS.border}`,
     borderRadius: 11
   },
+  suggestionBox: {
+    marginTop: 16,
+    padding: '14px 16px',
+    background: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    borderRadius: 10,
+    color: '#065f46',
+    fontSize: 14,
+    lineHeight: 1.6
+  },
   footer: {
     textAlign: 'center',
     color: '#94a3b8',
@@ -174,6 +184,49 @@ function formatStatus(status) {
   return String(status || 'Unknown')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+function formatDistance(km) {
+  const value = Number(km)
+
+  if (!Number.isFinite(value)) return ''
+  if (value < 0.1) return 'under 0.1 km'
+
+  return `${value.toFixed(1)} km`
+}
+
+// Says how fresh an ambulance position is.
+function formatPositionNote(minutes) {
+  if (minutes === null || minutes === undefined) {
+    return 'Position not live'
+  }
+
+  if (minutes <= 10) return 'Live GPS'
+  if (minutes < 60) return `Last GPS update ${minutes} min ago`
+  if (minutes < 1440) {
+    return `Last GPS update ${Math.floor(minutes / 60)} h ago`
+  }
+
+  return `Last GPS update ${Math.floor(minutes / 1440)} d ago`
+}
+
+// One plain string, because <option> can only hold text.
+function ambulanceOptionLabel(ambulance) {
+  const driver = ambulance.driver_name
+    ? ` - ${ambulance.driver_name}`
+    : ambulance.driver_id
+      ? ` - Driver #${ambulance.driver_id}`
+      : ' - No driver assigned'
+
+  const distance =
+    ambulance.distance_km !== null &&
+    ambulance.distance_km !== undefined
+      ? ` - ${formatDistance(ambulance.distance_km)} away`
+      : ''
+
+  const closest = ambulance.suggested ? ' (closest)' : ''
+
+  return `${ambulance.plate_number}${driver}${distance}${closest}`
 }
 
 function StatusBadge({ status }) {
@@ -435,6 +488,7 @@ export default function StaffDashboard({ view = 'dashboard' }) {
   const [ambulances, setAmbulances] = useState([])
   const [ambulanceStatuses, setAmbulanceStatuses] = useState({})
   const [selectedAmbulances, setSelectedAmbulances] = useState({})
+  const [suggestionsByCase, setSuggestionsByCase] = useState({})
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -523,6 +577,29 @@ export default function StaffDashboard({ view = 'dashboard' }) {
       })
 
       setAmbulanceStatuses(statusMap)
+
+      // Closest-ambulance suggestions for cases waiting for dispatch.
+      // If this fails, the plain list of available ambulances is used.
+      const requestedIds = caseList
+        .filter(item => item.status === 'requested')
+        .map(item => item.id)
+
+      const suggestionResults = await Promise.allSettled(
+        requestedIds.map(id =>
+          request(`/ambulances/suggestions/${id}`)
+        )
+      )
+
+      const suggestionMap = {}
+
+      requestedIds.forEach((id, index) => {
+        if (suggestionResults[index].status === 'fulfilled') {
+          suggestionMap[id] = suggestionResults[index].value
+        }
+      })
+
+      setSuggestionsByCase(suggestionMap)
+
       setLastRefresh(new Date())
       setError('')
     } catch (err) {
@@ -546,8 +623,31 @@ export default function StaffDashboard({ view = 'dashboard' }) {
     return () => clearInterval(interval)
   }, [view, loadDashboard])
 
+  // The ambulance choices for a case: suggestions (closest first)
+  // when available, otherwise the plain available list.
+  const getAmbulanceOptions = caseId =>
+    suggestionsByCase[caseId]?.ambulances ?? ambulances
+
+  // Staff's own choice if it is still valid, otherwise the closest
+  // ambulance. Dispatch still needs the staff member to click the button.
+  const getSelectedAmbulanceId = caseId => {
+    const options = getAmbulanceOptions(caseId)
+    const chosen = selectedAmbulances[caseId]
+
+    if (
+      chosen &&
+      options.some(item => String(item.id) === String(chosen))
+    ) {
+      return String(chosen)
+    }
+
+    const suggested = options.find(item => item.suggested)
+
+    return suggested ? String(suggested.id) : ''
+  }
+
   const handleDispatch = async caseId => {
-    const ambulanceId = selectedAmbulances[caseId]
+    const ambulanceId = getSelectedAmbulanceId(caseId)
 
     if (!ambulanceId) {
       setError('Please select an ambulance first.')
@@ -1048,6 +1148,16 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
                   const isBusy = updatingCase !== null
 
+                  // Dispatch panel data (only used while status is requested).
+                  const suggestion = suggestionsByCase[caseItem.id]
+                  const ambulanceOptions = getAmbulanceOptions(caseItem.id)
+                  const closestAmbulance = ambulanceOptions.find(
+                    item => item.suggested
+                  )
+                  const selectedAmbulanceId = getSelectedAmbulanceId(
+                    caseItem.id
+                  )
+
                   return (
                     <article
                       key={caseItem.id}
@@ -1123,6 +1233,10 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                           </div>
                         </div>
 
+                        {caseItem.status !== 'closed' && (
+                          <PatientHealthSummary caseId={caseItem.id} />
+                        )}
+
                         {caseItem.status === 'requested' && (
                           <section style={styles.actionPanel}>
                             <h4 style={{
@@ -1137,7 +1251,41 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                               assigned driver.
                             </p>
 
-                            {ambulances.length > 0 ? (
+                            {closestAmbulance && (
+                              <div style={styles.suggestionBox}>
+                                <strong>
+                                  Closest available ambulance:{' '}
+                                  {closestAmbulance.plate_number}
+                                </strong>
+
+                                <div>
+                                  {formatDistance(
+                                    closestAmbulance.distance_km
+                                  )}{' '}
+                                  from the patient
+                                  {closestAmbulance.driver_name
+                                    ? ` · Driver ${closestAmbulance.driver_name}`
+                                    : ''}
+                                  {' · '}
+                                  {formatPositionNote(
+                                    closestAmbulance.position_age_minutes
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {suggestion &&
+                              !suggestion.has_pickup_location && (
+                              <p style={{
+                                ...styles.sectionDescription,
+                                color: '#92400e'
+                              }}>
+                                This request has no patient location,
+                                so ambulances cannot be ranked by distance.
+                              </p>
+                            )}
+
+                            {ambulanceOptions.length > 0 ? (
                               <div style={{
                                 display: 'flex',
                                 flexWrap: 'wrap',
@@ -1146,9 +1294,7 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                               }}>
                                 <select
                                   aria-label={`Ambulance for case ${caseItem.id}`}
-                                  value={
-                                    selectedAmbulances[caseItem.id] || ''
-                                  }
+                                  value={selectedAmbulanceId}
                                   onChange={e =>
                                     setSelectedAmbulances(current => ({
                                       ...current,
@@ -1161,16 +1307,13 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                                     Select available ambulance
                                   </option>
 
-                                  {ambulances.map(ambulance => (
+                                  {ambulanceOptions.map(ambulance => (
                                     <option
                                       key={ambulance.id}
                                       value={ambulance.id}
                                       disabled={!ambulance.driver_id}
                                     >
-                                      {ambulance.plate_number}
-                                      {ambulance.driver_id
-                                        ? ` - Driver #${ambulance.driver_id}`
-                                        : ' - No driver assigned'}
+                                      {ambulanceOptionLabel(ambulance)}
                                     </option>
                                   ))}
                                 </select>
@@ -1180,7 +1323,7 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                                   style={styles.button}
                                   disabled={
                                     dispatchingCase !== null ||
-                                    !selectedAmbulances[caseItem.id]
+                                    !selectedAmbulanceId
                                   }
                                   onClick={() =>
                                     handleDispatch(caseItem.id)
@@ -1194,6 +1337,18 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                             ) : (
                               <p style={styles.sectionDescription}>
                                 No ambulances currently available.
+                              </p>
+                            )}
+
+                            {closestAmbulance && (
+                              <p style={{
+                                ...styles.sectionDescription,
+                                fontSize: 12
+                              }}>
+                                Distances are straight-line, from each
+                                ambulance's last known position to the
+                                patient's reported location. You can
+                                still choose a different ambulance.
                               </p>
                             )}
                           </section>

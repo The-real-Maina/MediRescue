@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, FaChevronDown, FaChevronRight, FaChartBar, FaFirstAid, FaCreditCard, FaSignOutAlt, FaMapMarkedAlt, FaHistory } from 'react-icons/fa'
+import { FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, FaChevronDown, FaChevronRight, FaChartBar, FaFirstAid, FaCreditCard, FaSignOutAlt, FaMapMarkedAlt, FaHistory, FaNotesMedical } from 'react-icons/fa'
 
 const menus = {
   super_admin: [
@@ -33,6 +33,7 @@ const menus = {
     { title: 'Dashboard', icon: FaTachometerAlt, path: '/patient-dashboard' },
     { title: 'Request Emergency', icon: FaFirstAid, path: '/emergency-request' },
     { title: 'My Emergency Cases', icon: FaHistory, path: '/my-cases' },
+    { title: 'My Health Profile', icon: FaNotesMedical, path: '/health-profile' },
     { title: 'Payments', icon: FaCreditCard, path: '/pay-now' }
   ]
 }

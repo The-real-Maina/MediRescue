@@ -1,10 +1,152 @@
-
 const pool = require('../config/db');
 
 const {
   initiateStkPush,
   queryStkPushStatus
 } = require('../services/mpesaService');
+
+// The prompt on the phone lasts about a minute. If Safaricom still has
+// no result after this long, the attempt is treated as expired so the
+// patient can try again.
+const PENDING_EXPIRY_MINUTES = 3;
+
+// ==========================================
+// HELPER: SETTLE A PENDING PAYMENT
+// Marks it completed or failed inside a transaction.
+// A completed payment also marks the case as paid.
+// Returns the final status of the payment.
+// ==========================================
+
+async function settlePayment(payment, newStatus) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [locked] = await connection.query(
+      `SELECT id, status
+       FROM payment
+       WHERE id = ?
+       FOR UPDATE`,
+      [payment.id]
+    );
+
+    if (locked.length === 0) {
+      await connection.rollback();
+      throw new Error('Payment record not found');
+    }
+
+    // Already settled by another request.
+    if (locked[0].status !== 'pending') {
+      await connection.rollback();
+      return locked[0].status;
+    }
+
+    await connection.query(
+      `UPDATE payment
+       SET status = ?,
+           paid_at = CASE
+             WHEN ? = 'completed' THEN NOW()
+             ELSE NULL
+           END
+       WHERE id = ?
+         AND status = 'pending'`,
+      [newStatus, newStatus, payment.id]
+    );
+
+    if (newStatus === 'completed') {
+      const [caseUpdate] = await connection.query(
+        `UPDATE \`case\`
+         SET status = 'paid'
+         WHERE id = ?
+           AND status = 'payment_pending'`,
+        [payment.case_id]
+      );
+
+      if (caseUpdate.affectedRows !== 1) {
+        throw new Error('Emergency case is not awaiting payment');
+      }
+
+      await connection.query(
+        `INSERT INTO case_status_log
+         (case_id, status, changed_by, changed_at)
+         VALUES (?, 'paid', NULL, NOW())`,
+        [payment.case_id]
+      );
+    }
+
+    await connection.commit();
+    return newStatus;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+// ==========================================
+// HELPER: RESOLVE A PENDING PAYMENT
+// Asks Safaricom for the result. Returns:
+//   { status: 'completed' | 'failed', resultCode }
+//   { status: 'waiting' }  (still within the time limit)
+// An attempt with no result after PENDING_EXPIRY_MINUTES
+// (or with no recorded start time) is marked failed.
+// ==========================================
+
+async function resolvePending(payment) {
+  let resultCode = null;
+
+  if (payment.checkout_request_id) {
+    try {
+      const result = await queryStkPushStatus(
+        payment.checkout_request_id
+      );
+
+      if (
+        String(result.ResponseCode) === '0' &&
+        result.ResultCode !== undefined &&
+        result.ResultCode !== null &&
+        String(result.ResultCode).trim() !== ''
+      ) {
+        const code = Number(result.ResultCode);
+
+        if (Number.isInteger(code)) {
+          resultCode = code;
+        }
+      }
+    } catch (error) {
+      // While the prompt is still open Safaricom may answer with an
+      // error. That simply means "not finished yet".
+      console.error(
+        'M-Pesa status query error:',
+        error.response?.data || error.message
+      );
+    }
+  }
+
+  if (resultCode !== null) {
+    const status = await settlePayment(
+      payment,
+      resultCode === 0 ? 'completed' : 'failed'
+    );
+
+    return { status, resultCode };
+  }
+
+  const age = payment.age_minutes;
+  const expired =
+    age === null ||
+    age === undefined ||
+    Number(age) >= PENDING_EXPIRY_MINUTES;
+
+  if (expired) {
+    const status = await settlePayment(payment, 'failed');
+    return { status, resultCode: null };
+  }
+
+  return { status: 'waiting' };
+}
 
 // ==========================================
 // INITIATE M-PESA PAYMENT
@@ -64,19 +206,49 @@ exports.initiatePayment = async (req, res) => {
       });
     }
 
+    // ======================================
+    // EARLIER ATTEMPTS
+    // A failed attempt never blocks a retry.
+    // A pending one is settled first, so an
+    // abandoned prompt does not lock the case.
+    // ======================================
+
     const [existing] = await pool.query(
-      `SELECT id, status
+      `SELECT
+         id,
+         case_id,
+         status,
+         checkout_request_id,
+         TIMESTAMPDIFF(MINUTE, initiated_at, NOW()) AS age_minutes
        FROM payment
        WHERE case_id = ?
          AND status IN ('pending', 'completed')
-       LIMIT 1`,
+       ORDER BY id DESC`,
       [caseId]
     );
 
-    if (existing.length > 0) {
+    if (existing.some(item => item.status === 'completed')) {
       return res.status(409).json({
-        error: 'A pending or completed payment already exists for this case'
+        error: 'This case has already been paid'
       });
+    }
+
+    for (const earlier of existing) {
+      const outcome = await resolvePending(earlier);
+
+      if (outcome.status === 'completed') {
+        return res.status(409).json({
+          error: 'Your earlier payment was confirmed. This case is now paid.'
+        });
+      }
+
+      if (outcome.status === 'waiting') {
+        return res.status(409).json({
+          error:
+            'A payment request is still waiting for your M-Pesa PIN. ' +
+            'Check your phone, or wait about a minute and try again.'
+        });
+      }
     }
 
     const callbackUrl = process.env.MPESA_CALLBACK_URL;
@@ -132,9 +304,10 @@ exports.initiatePayment = async (req, res) => {
          amount,
          phone_number,
          checkout_request_id,
-         status
+         status,
+         initiated_at
        )
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
+       VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
       [
         caseId,
         emergencyCase.hospital_id,
@@ -183,7 +356,8 @@ exports.checkPaymentStatus = async (req, res) => {
          p.id,
          p.case_id,
          p.status,
-         p.checkout_request_id
+         p.checkout_request_id,
+         TIMESTAMPDIFF(MINUTE, p.initiated_at, NOW()) AS age_minutes
        FROM payment p
        INNER JOIN \`case\` c
          ON c.id = p.case_id
@@ -209,129 +383,24 @@ exports.checkPaymentStatus = async (req, res) => {
       });
     }
 
-    const result = await queryStkPushStatus(
-      payment.checkout_request_id
-    );
+    const outcome = await resolvePending(payment);
 
-    if (String(result.ResponseCode) !== '0') {
+    if (outcome.status === 'waiting') {
       return res.status(200).json({
         case_id: caseId,
         status: 'pending',
-        message: 'Safaricom has not confirmed the payment'
+        message: 'Waiting for the M-Pesa PIN to be entered'
       });
     }
 
-    if (
-      result.ResultCode === undefined ||
-      result.ResultCode === null ||
-      String(result.ResultCode).trim() === ''
-    ) {
-      return res.status(200).json({
-        case_id: caseId,
-        status: 'pending',
-        message: 'Payment result is not available yet'
-      });
-    }
-
-    const resultCode = Number(result.ResultCode);
-
-    if (!Number.isInteger(resultCode)) {
-      return res.status(200).json({
-        case_id: caseId,
-        status: 'pending',
-        message: 'Safaricom returned an invalid result code'
-      });
-    }
-
-    const newStatus =
-      resultCode === 0 ? 'completed' : 'failed';
-
-    const connection = await pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      const [lockedPayments] = await connection.query(
-        `SELECT id, status
-         FROM payment
-         WHERE id = ?
-         FOR UPDATE`,
-        [payment.id]
-      );
-
-      if (lockedPayments.length === 0) {
-        await connection.rollback();
-
-        return res.status(404).json({
-          error: 'Payment record not found'
-        });
-      }
-
-      if (lockedPayments[0].status !== 'pending') {
-        await connection.rollback();
-
-        return res.status(200).json({
-          case_id: caseId,
-          status: lockedPayments[0].status
-        });
-      }
-
-      await connection.query(
-        `UPDATE payment
-         SET status = ?,
-             paid_at = CASE
-               WHEN ? = 'completed' THEN NOW()
-               ELSE NULL
-             END
-         WHERE id = ?
-           AND status = 'pending'`,
-        [newStatus, newStatus, payment.id]
-      );
-
-      if (newStatus === 'completed') {
-        const [caseUpdate] = await connection.query(
-          `UPDATE \`case\`
-           SET status = 'paid'
-           WHERE id = ?
-             AND status = 'payment_pending'`,
-          [caseId]
-        );
-
-        if (caseUpdate.affectedRows !== 1) {
-          throw new Error(
-            'Emergency case is not awaiting payment'
-          );
-        }
-
-        await connection.query(
-          `INSERT INTO case_status_log
-           (
-             case_id,
-             status,
-             changed_by,
-             changed_at
-           )
-           VALUES (?, 'paid', NULL, NOW())`,
-          [caseId]
-        );
-      }
-
-      await connection.commit();
-
-      return res.status(200).json({
-        case_id: caseId,
-        status: newStatus,
-        result_code: resultCode
-      });
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
+    return res.status(200).json({
+      case_id: caseId,
+      status: outcome.status,
+      result_code: outcome.resultCode ?? null
+    });
   } catch (error) {
     console.error(
-      'M-Pesa status query error:',
+      'Payment status check error:',
       error.response?.data || error.message
     );
 

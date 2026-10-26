@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CaseChat from '../components/CaseChat'
+import PatientHealthSummary from '../components/PatientHealthSummary'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const AMBULANCE_API = `${API}/ambulances`
@@ -286,6 +287,9 @@ function EmergencyCard({ emergency, onAction, busy }) {
           complete patient handover.
         </p>
       )}
+
+      {/* Health details the patient agreed to share */}
+      <PatientHealthSummary caseId={emergency.id} />
 
       {/* Chat with the patient while the ambulance is on its way */}
       {status === 'dispatched' && (
