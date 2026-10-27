@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, FaChevronDown, FaChevronRight, FaChartBar, FaFirstAid, FaCreditCard, FaSignOutAlt, FaMapMarkedAlt, FaHistory, FaNotesMedical } from 'react-icons/fa'
+import { FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, FaChevronDown, FaChevronRight, FaChartBar, FaFirstAid, FaCreditCard, FaSignOutAlt, FaMapMarkedAlt, FaHistory, FaNotesMedical, FaKey } from 'react-icons/fa'
+
+const changePasswordItem = { title: 'Change Password', icon: FaKey, path: '/change-password' }
 
 const menus = {
   super_admin: [
@@ -18,16 +20,23 @@ const menus = {
       { title: 'Payments', path: '/admin/payments' }
     ] }
   ],
+  hospital_admin: [
+    { title: 'Team & Shifts', icon: FaUsers, path: '/hospital-admin-dashboard' },
+    { title: 'Team Accounts', icon: FaUserMd, path: '/hospital-admin/team' },
+    changePasswordItem
+  ],
   hospital_staff: [
     { title: 'Dashboard', icon: FaTachometerAlt, path: '/staff-dashboard' },
     { title: 'Ambulance GPS Tracking', icon: FaMapMarkedAlt, path: '/staff/tracking' },
     { title: 'Emergency Cases', icon: FaFirstAid, path: '/staff/cases' },
-    { title: 'Closed Cases / History', icon: FaHistory, path: '/staff/history' }
+    { title: 'Closed Cases / History', icon: FaHistory, path: '/staff/history' },
+    changePasswordItem
   ],
   driver: [
     { title: 'Dashboard', icon: FaTachometerAlt, path: '/driver-dashboard' },
     { title: 'Live GPS Tracking', icon: FaMapMarkedAlt, path: '/driver/tracking' },
-    { title: 'Assigned Ambulance', icon: FaAmbulance, path: '/driver/ambulance' }
+    { title: 'Assigned Ambulance', icon: FaAmbulance, path: '/driver/ambulance' },
+    changePasswordItem
   ],
   patient: [
     { title: 'Dashboard', icon: FaTachometerAlt, path: '/patient-dashboard' },

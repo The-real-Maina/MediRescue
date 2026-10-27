@@ -1,7 +1,9 @@
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CaseChat from '../components/CaseChat'
 import PatientHealthSummary from '../components/PatientHealthSummary'
+import StaffHRPanel from '../components/StaffHRPanel'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const AMBULANCE_API = `${API}/ambulances`
@@ -288,10 +290,8 @@ function EmergencyCard({ emergency, onAction, busy }) {
         </p>
       )}
 
-      {/* Health details the patient agreed to share */}
       <PatientHealthSummary caseId={emergency.id} />
 
-      {/* Chat with the patient while the ambulance is on its way */}
       {status === 'dispatched' && (
         <CaseChat caseId={emergency.id} />
       )}
@@ -411,8 +411,6 @@ export default function DriverDashboard({ view = 'dashboard' }) {
     if (showLoading) setCasesLoading(true)
 
     try {
-      // This endpoint must return cases assigned to the
-      // authenticated driver's ambulance.
       const data = await authenticatedRequest('/cases/driver/assigned')
 
       const list = Array.isArray(data)
@@ -765,6 +763,13 @@ export default function DriverDashboard({ view = 'dashboard' }) {
               </article>
             ))}
           </div>
+        )}
+
+        {/* Driver HR: shifts, leave, absences and announcements */}
+        {!loading && ambulance && view === 'dashboard' && (
+          <section style={{ marginTop: 28 }}>
+            <StaffHRPanel />
+          </section>
         )}
 
         {!loading &&

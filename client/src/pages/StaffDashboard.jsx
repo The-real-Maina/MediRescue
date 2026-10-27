@@ -1,7 +1,9 @@
+
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap'
 import PatientHealthSummary from '../components/PatientHealthSummary'
+import StaffHRPanel from '../components/StaffHRPanel'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -195,7 +197,6 @@ function formatDistance(km) {
   return `${value.toFixed(1)} km`
 }
 
-// Says how fresh an ambulance position is.
 function formatPositionNote(minutes) {
   if (minutes === null || minutes === undefined) {
     return 'Position not live'
@@ -210,7 +211,6 @@ function formatPositionNote(minutes) {
   return `Last GPS update ${Math.floor(minutes / 1440)} d ago`
 }
 
-// One plain string, because <option> can only hold text.
 function ambulanceOptionLabel(ambulance) {
   const driver = ambulance.driver_name
     ? ` - ${ambulance.driver_name}`
@@ -578,8 +578,6 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
       setAmbulanceStatuses(statusMap)
 
-      // Closest-ambulance suggestions for cases waiting for dispatch.
-      // If this fails, the plain list of available ambulances is used.
       const requestedIds = caseList
         .filter(item => item.status === 'requested')
         .map(item => item.id)
@@ -623,13 +621,9 @@ export default function StaffDashboard({ view = 'dashboard' }) {
     return () => clearInterval(interval)
   }, [view, loadDashboard])
 
-  // The ambulance choices for a case: suggestions (closest first)
-  // when available, otherwise the plain available list.
   const getAmbulanceOptions = caseId =>
     suggestionsByCase[caseId]?.ambulances ?? ambulances
 
-  // Staff's own choice if it is still valid, otherwise the closest
-  // ambulance. Dispatch still needs the staff member to click the button.
   const getSelectedAmbulanceId = caseId => {
     const options = getAmbulanceOptions(caseId)
     const chosen = selectedAmbulances[caseId]
@@ -874,58 +868,63 @@ export default function StaffDashboard({ view = 'dashboard' }) {
         )}
 
         {view === 'dashboard' && (
-          <section style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))',
-            gap: 17,
-            marginBottom: 35
-          }}>
-            {summary.map(item => (
-              <div
-                key={item.label}
-                style={{
-                  ...styles.card,
-                  padding: 23,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12
-                }}
-              >
-                <div>
-                  <p style={{
-                    color: COLORS.muted,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    margin: '0 0 12px'
-                  }}>
-                    {item.label}
-                  </p>
+          <>
+            <section style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))',
+              gap: 17,
+              marginBottom: 35
+            }}>
+              {summary.map(item => (
+                <div
+                  key={item.label}
+                  style={{
+                    ...styles.card,
+                    padding: 23,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12
+                  }}
+                >
+                  <div>
+                    <p style={{
+                      color: COLORS.muted,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      margin: '0 0 12px'
+                    }}>
+                      {item.label}
+                    </p>
 
-                  <strong style={{
-                    color: COLORS.navy,
-                    fontSize: 33
+                    <strong style={{
+                      color: COLORS.navy,
+                      fontSize: 33
+                    }}>
+                      {item.value}
+                    </strong>
+                  </div>
+
+                  <span style={{
+                    background: item.tint,
+                    color: item.accent,
+                    width: 48,
+                    height: 48,
+                    borderRadius: 12,
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontWeight: 900,
+                    fontSize: item.symbol === 'KSh' ? 13 : 24
                   }}>
-                    {item.value}
-                  </strong>
+                    {item.symbol}
+                  </span>
                 </div>
+              ))}
+            </section>
 
-                <span style={{
-                  background: item.tint,
-                  color: item.accent,
-                  width: 48,
-                  height: 48,
-                  borderRadius: 12,
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontWeight: 900,
-                  fontSize: item.symbol === 'KSh' ? 13 : 24
-                }}>
-                  {item.symbol}
-                </span>
-              </div>
-            ))}
-          </section>
+            {/* Staff and driver HR features */}
+            <StaffHRPanel />
+          </>
         )}
 
         {view === 'tracking' && (
@@ -1148,7 +1147,6 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
                   const isBusy = updatingCase !== null
 
-                  // Dispatch panel data (only used while status is requested).
                   const suggestion = suggestionsByCase[caseItem.id]
                   const ambulanceOptions = getAmbulanceOptions(caseItem.id)
                   const closestAmbulance = ambulanceOptions.find(
@@ -1276,14 +1274,14 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
                             {suggestion &&
                               !suggestion.has_pickup_location && (
-                              <p style={{
-                                ...styles.sectionDescription,
-                                color: '#92400e'
-                              }}>
-                                This request has no patient location,
-                                so ambulances cannot be ranked by distance.
-                              </p>
-                            )}
+                                <p style={{
+                                  ...styles.sectionDescription,
+                                  color: '#92400e'
+                                }}>
+                                  This request has no patient location,
+                                  so ambulances cannot be ranked by distance.
+                                </p>
+                              )}
 
                             {ambulanceOptions.length > 0 ? (
                               <div style={{

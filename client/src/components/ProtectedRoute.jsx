@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 const homeRoutes = {
   patient: '/patient-dashboard',
   hospital_staff: '/staff-dashboard',
+  hospital_admin: '/hospital-admin-dashboard',
   driver: '/driver-dashboard',
   super_admin: '/admin-dashboard'
 }

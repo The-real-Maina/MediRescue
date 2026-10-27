@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 
 const express = require('express');
@@ -47,10 +48,46 @@ app.use(
   require('./routes/hospitalPricingRoutes')
 );
 
-// Super Admin
+// ==========================================
+// SUPER ADMIN ROUTES
+// ==========================================
+
+// Hospital admin accounts and password resets
+app.use('/api/admin', require('./routes/adminAccountRoutes'));
+
+// General Super Admin functionality
 app.use('/api/admin', require('./routes/adminRoutes'));
 
-// M-Pesa Daraja Sandbox
+// ==========================================
+// HOSPITAL ADMIN ROUTES
+// ==========================================
+
+// Hospital team overview and shift assignment
+app.use(
+  '/api/hospital-admin',
+  require('./routes/hospitalAdminRoutes')
+);
+
+// Hospital Admin HR: leave, absences, attendance and announcements
+app.use(
+  '/api/hospital-admin/hr',
+  require('./routes/hospitalAdminHrRoutes')
+);
+
+// ==========================================
+// TEAM MEMBER ROUTES
+// ==========================================
+
+// Staff and driver HR self-service
+app.use(
+  '/api/team-member',
+  require('./routes/teamMemberRoutes')
+);
+
+// ==========================================
+// M-PESA
+// ==========================================
+
 app.use('/api/mpesa', require('./routes/mpesaRoutes'));
 
 // ==========================================
@@ -64,10 +101,11 @@ app.get('/api/db-test', async (req, res) => {
     );
 
     res.json(rows);
-
   } catch (err) {
+    console.error('Database test failed:', err.message);
+
     res.status(500).json({
-      error: err.message
+      error: 'Database connection or query failed'
     });
   }
 });

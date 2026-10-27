@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API_BASE = 'http://localhost:5000/api/admin'
-const blankStaff = { name: '', email: '', password: '', hospital_id: '' }
+const blankStaff = {
+  name: '',
+  email: '',
+  password: '',
+  hospital_id: '',
+  account_type: 'hospital_staff'
+}
 const blankEdit = { name: '', email: '', hospital_id: '' }
 
 const styles = `
@@ -34,7 +40,7 @@ const styles = `
 .sm-btn{border:0;border-radius:9px;padding:12px 18px;font-weight:800;cursor:pointer;transition:transform .18s,box-shadow .18s}
 .sm-btn:hover:not(:disabled),.sm-back:hover{transform:translateY(-2px);box-shadow:0 7px 18px #102a4324}
 .sm-btn:disabled{opacity:.55;cursor:not-allowed}
-.sm-red{background:#e52634;color:white}.sm-blue{background:#1d4ed8;color:white}.sm-grey{background:#64748b;color:white}
+.sm-red{background:#e52634;color:white}.sm-blue{background:#1d4ed8;color:white}.sm-grey{background:#64748b;color:white}.sm-amber{background:#b45309;color:white}.sm-green{background:#047857;color:white}.sm-danger{background:#991b1b;color:white}
 .sm-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
 .sm-message{padding:13px 16px;border-radius:9px;margin:0 0 19px;font-size:14px}
 .sm-error{background:#fff1f2;color:#b91c1c;border:1px solid #fecdd3}
@@ -43,12 +49,13 @@ const styles = `
 .sm-controls{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:23px}
 .sm-search{flex:1 1 270px;min-width:0}.sm-filter{flex:0 1 210px}
 .sm-table-wrap{overflow-x:auto;border:1px solid #dce5ef;border-radius:11px}
-.sm-table{width:100%;min-width:860px;border-collapse:collapse;text-align:left}
+.sm-table{width:100%;min-width:980px;border-collapse:collapse;text-align:left}
 .sm-table th{padding:17px 14px;background:#f3f7fb;border-bottom:1px solid #dce5ef;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.7px;white-space:nowrap}
 .sm-table td{padding:17px 14px;border-bottom:1px solid #e8edf4;font-size:13px;color:#102a43}
 .sm-table tbody tr:hover{background:#f8fbff}.sm-table tbody tr:last-child td{border-bottom:0}
 .sm-role{display:inline-block;border-radius:99px;padding:7px 11px;font-size:12px;font-weight:800;white-space:nowrap}
-.sm-role-staff{background:#eaf2ff;color:#1d4ed8}.sm-role-driver{background:#fff1f2;color:#be123c}
+.sm-role-staff{background:#eaf2ff;color:#1d4ed8}.sm-role-driver{background:#fff1f2;color:#be123c}.sm-role-admin{background:#f3e8ff;color:#7e22ce}.sm-role-off{background:#e2e8f0;color:#475569;margin-left:6px}
+.sm-row-actions{display:flex;gap:8px;flex-wrap:wrap}
 .sm-empty{padding:35px;text-align:center;color:#64748b}
 .sm-footer{text-align:center;color:#8192a8;font-size:12px;padding-top:12px}
 @media(max-width:600px){.sm-main{padding:28px 15px 45px}.sm-panel{padding:18px}.sm-header{padding:16px}.sm-record-head .sm-btn{width:100%}}
@@ -70,6 +77,16 @@ function StaffManagement() {
   const [editingId, setEditingId] = useState(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+
+  const [resetTarget, setResetTarget] = useState(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState('')
+
+  const [confirmAction, setConfirmAction] = useState(null)
+  const [acting, setActing] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   const unauthorized = () => {
     localStorage.removeItem('medirescue_token')
@@ -145,6 +162,20 @@ function StaffManagement() {
     }
   }
 
+  // Closes the edit, reset-password and confirm panels so only one
+  // is open at a time.
+  const resetPanels = () => {
+    setEditingId(null)
+    setEditForm({ ...blankEdit })
+    setEditError('')
+    setResetTarget(null)
+    setResetPassword('')
+    setResetConfirm('')
+    setResetError('')
+    setConfirmAction(null)
+    setActionError('')
+  }
+
   const handleRegister = async (event) => {
     event.preventDefault()
     if (saving) return
@@ -160,33 +191,42 @@ function StaffManagement() {
       setFormError('Password must contain 8 to 72 characters')
       return
     }
+    const isAdmin = form.account_type === 'hospital_admin'
     setSaving(true)
     try {
-      const result = await fetchJSON(`${API_BASE}/staff`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name, email, password: form.password,
-          hospital_id: Number(form.hospital_id)
-        })
-      })
-      setSuccess(result.message || 'Hospital staff registered successfully')
-      setForm({ ...blankStaff })
+      const result = await fetchJSON(
+        `${API_BASE}/${isAdmin ? 'hospital-admins' : 'staff'}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name, email, password: form.password,
+            hospital_id: Number(form.hospital_id)
+          })
+        }
+      )
+      setSuccess(
+        result.message ||
+        (isAdmin
+          ? 'Hospital admin registered successfully'
+          : 'Hospital staff registered successfully')
+      )
+      setForm({ ...blankStaff, account_type: form.account_type })
       await refreshStaffAfterSave()
     } catch (err) {
-      setFormError(err.message || 'Failed to register hospital staff')
+      setFormError(err.message || 'Failed to register account')
     } finally {
       setSaving(false)
     }
   }
 
   const handleEdit = (member) => {
+    resetPanels()
     setEditingId(member.id)
     setEditForm({
       name: member.name || '',
       email: member.email || '',
       hospital_id: String(member.hospital_id ?? '')
     })
-    setEditError('')
     setSuccess('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -226,19 +266,136 @@ function StaffManagement() {
     }
   }
 
+  const handleStartReset = (member) => {
+    resetPanels()
+    setResetTarget(member)
+    setSuccess('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleCancelReset = () => {
+    setResetTarget(null)
+    setResetPassword('')
+    setResetConfirm('')
+    setResetError('')
+  }
+
+  const handleReset = async (event) => {
+    event.preventDefault()
+    if (resetting || !resetTarget) return
+    setResetError('')
+    setSuccess('')
+    if (resetPassword.length < 8 || resetPassword.length > 72) {
+      setResetError('Password must contain 8 to 72 characters')
+      return
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError('The two passwords do not match')
+      return
+    }
+    setResetting(true)
+    try {
+      const result = await fetchJSON(
+        `${API_BASE}/staff/${resetTarget.id}/password`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ password: resetPassword })
+        }
+      )
+      setSuccess(result.message || 'Password reset successfully')
+      handleCancelReset()
+    } catch (err) {
+      setResetError(err.message || 'Failed to reset password')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const handleStartConfirm = (type, member) => {
+    resetPanels()
+    setConfirmAction({ type, member })
+    setSuccess('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleRunAction = async () => {
+    if (!confirmAction || acting) return
+    const { type, member } = confirmAction
+    setActing(true)
+    setActionError('')
+    setSuccess('')
+    try {
+      const result = await fetchJSON(
+        type === 'delete'
+          ? `${API_BASE}/staff/${member.id}`
+          : `${API_BASE}/staff/${member.id}/deactivate`,
+        { method: type === 'delete' ? 'DELETE' : 'POST' }
+      )
+      setSuccess(result.message || 'Done')
+      setConfirmAction(null)
+      await refreshStaffAfterSave()
+    } catch (err) {
+      setActionError(err.message || 'The action failed')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  const handleReactivate = async (member) => {
+    if (acting) return
+    resetPanels()
+    setActing(true)
+    setSuccess('')
+    setError('')
+    try {
+      const result = await fetchJSON(
+        `${API_BASE}/staff/${member.id}/reactivate`,
+        { method: 'POST' }
+      )
+      setSuccess(result.message || 'Account reactivated')
+      await refreshStaffAfterSave()
+    } catch (err) {
+      setError(err.message || 'Failed to reactivate account')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  const isInactive = member => Number(member.is_active) === 0
+
   const filteredStaff = staff.filter((member) => {
     const query = search.trim().toLowerCase()
     const matchesSearch = [
       member.id, member.name, member.email,
       member.hospital_name, member.role
     ].some(value => String(value ?? '').toLowerCase().includes(query))
-    return matchesSearch && (roleFilter === 'all' || member.role === roleFilter)
+    const matchesFilter =
+      roleFilter === 'all' ||
+      (roleFilter === 'inactive'
+        ? isInactive(member)
+        : member.role === roleFilter)
+    return matchesSearch && matchesFilter
   })
 
   const staffCount = staff.filter(s => s.role === 'hospital_staff').length
   const driverCount = staff.filter(s => s.role === 'driver').length
+  const adminCount = staff.filter(
+    s => s.role === 'hospital_admin' && !isInactive(s)
+  ).length
+
   const formatRole = role => role === 'hospital_staff'
-    ? 'Hospital Staff' : role === 'driver' ? 'Ambulance Driver' : (role || 'Unknown')
+    ? 'Hospital Staff'
+    : role === 'driver'
+      ? 'Ambulance Driver'
+      : role === 'hospital_admin'
+        ? 'Hospital Admin'
+        : (role || 'Unknown')
+
+  const roleClass = role => role === 'driver'
+    ? 'sm-role-driver'
+    : role === 'hospital_admin'
+      ? 'sm-role-admin'
+      : 'sm-role-staff'
 
   const renderField = (id, label, name, value, change, type = 'text', props = {}) => (
     <div className="sm-field">
@@ -283,14 +440,16 @@ function StaffManagement() {
         <p className="sm-eyebrow">WORKFORCE MANAGEMENT</p>
         <h1 className="sm-title">Staff Management</h1>
         <p className="sm-subtitle">
-          Register hospital staff, manage employee records, and review ambulance
-          drivers and hospital assignments across MediRescue.
+          Register hospital staff and hospital admins, manage employee records,
+          reset passwords, release or remove hospital admins, and review
+          ambulance drivers and hospital assignments across MediRescue.
         </p>
 
         <div className="sm-stats">
           {[
             { label: 'Total Personnel', value: staff.length, icon: '👥', tint: '#eaf2ff', color: '#1d4ed8' },
             { label: 'Hospital Staff', value: staffCount, icon: '+', tint: '#fff1f2', color: '#be123c' },
+            { label: 'Active Hospital Admins', value: adminCount, icon: '☰', tint: '#f3e8ff', color: '#7e22ce' },
             { label: 'Ambulance Drivers', value: driverCount, icon: '🚑', tint: '#e8fbf0', color: '#047857' },
             { label: 'Registered Hospitals', value: hospitals.length, icon: '⌂', tint: '#fff7ed', color: '#c2410c' }
           ].map(item => (
@@ -309,14 +468,27 @@ function StaffManagement() {
         {success && <div role="status" className="sm-message sm-success">{success}</div>}
 
         <section className="sm-panel">
-          <h2 className="sm-panel-title">Register New Hospital Staff</h2>
+          <h2 className="sm-panel-title">Register New Account</h2>
           <p className="sm-panel-sub">
-            Create a staff account and assign the employee to a registered hospital.
-            Ambulance drivers are registered from Manage Ambulances.
+            Create a hospital staff or hospital admin account and assign it to a
+            registered hospital. A hospital admin manages that hospital's team
+            and shifts. Ambulance drivers are registered from Manage Ambulances.
           </p>
           {formError && <div role="alert" className="sm-message sm-error">{formError}</div>}
           <form onSubmit={handleRegister}>
             <div className="sm-grid">
+              <div className="sm-field">
+                <label htmlFor="sm-type">Account Type</label>
+                <select
+                  id="sm-type"
+                  name="account_type"
+                  value={form.account_type}
+                  onChange={e => setForm(prev => ({ ...prev, account_type: e.target.value }))}
+                >
+                  <option value="hospital_staff">Hospital Staff</option>
+                  <option value="hospital_admin">Hospital Admin</option>
+                </select>
+              </div>
               {renderField('sm-name', 'Full Name', 'name', form.name,
                 e => setForm(prev => ({ ...prev, name: e.target.value })),
                 'text', { maxLength: 100, placeholder: 'e.g. Mary Wanjiku' })}
@@ -333,7 +505,11 @@ function StaffManagement() {
             <div className="sm-actions">
               <button type="submit" className="sm-btn sm-red"
                 disabled={saving || loading || hospitals.length === 0}>
-                {saving ? 'Registering...' : '+ Register Hospital Staff'}
+                {saving
+                  ? 'Registering...'
+                  : form.account_type === 'hospital_admin'
+                    ? '+ Register Hospital Admin'
+                    : '+ Register Hospital Staff'}
               </button>
             </div>
           </form>
@@ -368,6 +544,68 @@ function StaffManagement() {
           </section>
         )}
 
+        {resetTarget && (
+          <section className="sm-panel">
+            <h2 className="sm-panel-title">
+              Reset Password: {resetTarget.name || resetTarget.email}
+            </h2>
+            <p className="sm-panel-sub">
+              Set a new password for {resetTarget.email}. Share it with them
+              securely; they will use it the next time they log in.
+            </p>
+            {resetError && <div role="alert" className="sm-message sm-error">{resetError}</div>}
+            <form onSubmit={handleReset}>
+              <div className="sm-grid">
+                {renderField('sm-reset-password', 'New Password', 'password', resetPassword,
+                  e => setResetPassword(e.target.value),
+                  'password', { minLength: 8, maxLength: 72,
+                    autoComplete: 'new-password', placeholder: '8–72 characters' })}
+                {renderField('sm-reset-confirm', 'Confirm New Password', 'confirm', resetConfirm,
+                  e => setResetConfirm(e.target.value),
+                  'password', { minLength: 8, maxLength: 72,
+                    autoComplete: 'new-password', placeholder: 'Type it again' })}
+              </div>
+              <div className="sm-actions">
+                <button type="submit" className="sm-btn sm-amber" disabled={resetting}>
+                  {resetting ? 'Saving...' : 'Reset Password'}
+                </button>
+                <button type="button" className="sm-btn sm-grey"
+                  onClick={handleCancelReset} disabled={resetting}>Cancel</button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {confirmAction && (
+          <section className="sm-panel">
+            <h2 className="sm-panel-title">
+              {confirmAction.type === 'delete'
+                ? 'Delete hospital admin permanently?'
+                : 'Release hospital admin?'}
+            </h2>
+            <p className="sm-panel-sub">
+              {confirmAction.type === 'delete'
+                ? `${confirmAction.member.name || confirmAction.member.email} (${confirmAction.member.email}) will be removed completely. This cannot be undone. Shifts they assigned stay in place. If they only left the hospital, use Release instead.`
+                : `${confirmAction.member.name || confirmAction.member.email} (${confirmAction.member.email}) will lose access immediately, even if they are logged in right now. Their record is kept and you can reactivate the account later.`}
+            </p>
+            {actionError && <div role="alert" className="sm-message sm-error">{actionError}</div>}
+            <div className="sm-actions" style={{ marginTop: 0 }}>
+              <button type="button"
+                className={`sm-btn ${confirmAction.type === 'delete' ? 'sm-danger' : 'sm-amber'}`}
+                onClick={handleRunAction} disabled={acting}>
+                {acting
+                  ? 'Working...'
+                  : confirmAction.type === 'delete'
+                    ? 'Yes, delete permanently'
+                    : 'Yes, release'}
+              </button>
+              <button type="button" className="sm-btn sm-grey"
+                onClick={() => { setConfirmAction(null); setActionError('') }}
+                disabled={acting}>Cancel</button>
+            </div>
+          </section>
+        )}
+
         <section className="sm-panel">
           <div className="sm-record-head">
             <div>
@@ -392,7 +630,9 @@ function StaffManagement() {
               value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
               <option value="all">All Roles</option>
               <option value="hospital_staff">Hospital Staff</option>
+              <option value="hospital_admin">Hospital Admins</option>
               <option value="driver">Ambulance Drivers</option>
+              <option value="inactive">Inactive Accounts</option>
             </select>
           </div>
           {error && <div role="alert" className="sm-message sm-error">{error}</div>}
@@ -408,25 +648,53 @@ function StaffManagement() {
                     'Assigned Hospital', 'Actions'].map(h => <th key={h}>{h}</th>)}
                 </tr></thead>
                 <tbody>
-                  {filteredStaff.map(member => (
-                    <tr key={member.id}>
-                      <td style={{ fontWeight: 850, color: '#e52634' }}>#{member.id}</td>
-                      <td style={{ fontWeight: 750 }}>{member.name || 'Unknown'}</td>
-                      <td>{member.email}</td>
-                      <td>
-                        <span className={`sm-role ${member.role === 'driver'
-                          ? 'sm-role-driver' : 'sm-role-staff'}`}>
-                          {formatRole(member.role)}
-                        </span>
-                      </td>
-                      <td>{member.hospital_name || 'Not assigned'}</td>
-                      <td>
-                        <button type="button" className="sm-btn sm-blue"
-                          style={{ padding: '9px 15px' }}
-                          onClick={() => handleEdit(member)}>Edit</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredStaff.map(member => {
+                    const inactive = isInactive(member)
+                    const isAdmin = member.role === 'hospital_admin'
+
+                    return (
+                      <tr key={member.id} style={inactive ? { opacity: 0.65 } : undefined}>
+                        <td style={{ fontWeight: 850, color: '#e52634' }}>#{member.id}</td>
+                        <td style={{ fontWeight: 750 }}>{member.name || 'Unknown'}</td>
+                        <td>{member.email}</td>
+                        <td>
+                          <span className={`sm-role ${roleClass(member.role)}`}>
+                            {formatRole(member.role)}
+                          </span>
+                          {inactive && (
+                            <span className="sm-role sm-role-off">Inactive</span>
+                          )}
+                        </td>
+                        <td>{member.hospital_name || 'Not assigned'}</td>
+                        <td>
+                          <div className="sm-row-actions">
+                            <button type="button" className="sm-btn sm-blue"
+                              style={{ padding: '9px 15px' }}
+                              onClick={() => handleEdit(member)}>Edit</button>
+                            <button type="button" className="sm-btn sm-amber"
+                              style={{ padding: '9px 15px' }}
+                              onClick={() => handleStartReset(member)}>Reset Password</button>
+                            {isAdmin && !inactive && (
+                              <button type="button" className="sm-btn sm-grey"
+                                style={{ padding: '9px 15px' }}
+                                onClick={() => handleStartConfirm('release', member)}>Release</button>
+                            )}
+                            {isAdmin && inactive && (
+                              <button type="button" className="sm-btn sm-green"
+                                style={{ padding: '9px 15px' }}
+                                disabled={acting}
+                                onClick={() => handleReactivate(member)}>Reactivate</button>
+                            )}
+                            {isAdmin && (
+                              <button type="button" className="sm-btn sm-danger"
+                                style={{ padding: '9px 15px' }}
+                                onClick={() => handleStartConfirm('delete', member)}>Delete</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

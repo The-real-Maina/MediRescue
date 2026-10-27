@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 
@@ -16,6 +15,12 @@ const roles = [
     label: 'Hospital Staff',
     icon: '✚',
     description: 'Emergency coordination'
+  },
+  {
+    value: 'hospital_admin',
+    label: 'Hospital Admin',
+    icon: '☰',
+    description: 'Team & shifts'
   },
   {
     value: 'driver',
@@ -206,6 +211,7 @@ function Login() {
       const destinations = {
         patient: '/patient-dashboard',
         hospital_staff: '/staff-dashboard',
+        hospital_admin: '/hospital-admin-dashboard',
         driver: '/driver-dashboard',
         super_admin: '/admin-dashboard'
       }
@@ -590,9 +596,11 @@ function Login() {
                   placeholder={
                     role === 'super_admin'
                       ? 'admin@medirescue.com'
-                      : role === 'driver'
-                        ? 'driver@hospital.com'
-                        : 'staff@hospital.com'
+                      : role === 'hospital_admin'
+                        ? 'admin@hospital.com'
+                        : role === 'driver'
+                          ? 'driver@hospital.com'
+                          : 'staff@hospital.com'
                   }
                   value={formData.email}
                   onChange={handleChange}
