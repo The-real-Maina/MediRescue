@@ -44,8 +44,43 @@ const activeStatuses = [
   'arrived_at_hospital'
 ]
 
+const ambulanceStatusOptions = [
+  {
+    value: 'available',
+    label: 'Available',
+    description: 'Ready for dispatch',
+    color: '#15803d'
+  },
+  {
+    value: 'on_call',
+    label: 'On Call',
+    description: 'Handling an emergency',
+    color: '#1d4ed8'
+  },
+  {
+    value: 'under_repair',
+    label: 'Under Repair',
+    description: 'Maintenance required',
+    color: '#b45309'
+  },
+  {
+    value: 'out_of_service',
+    label: 'Out of Service',
+    description: 'Not operational',
+    color: '#b91c1c'
+  }
+]
+
+function normalizeAmbulanceStatus(value) {
+  return value === 'dispatched' ? 'on_call' : value
+}
+
 function formatStatus(value) {
-  return String(value || 'Unknown')
+  const normalized = normalizeAmbulanceStatus(value)
+
+  if (normalized === 'on_call') return 'On Call'
+
+  return String(normalized || 'Unknown')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, char => char.toUpperCase())
 }
@@ -194,7 +229,7 @@ function EmergencyCard({ emergency, onAction, busy }) {
             item => item[0] === status
           )
 
-          const completed = index < currentIndex
+          const completed = currentIndex >= 0 && index < currentIndex
           const current = index === currentIndex
 
           return (
@@ -322,6 +357,8 @@ export default function DriverDashboard({ view = 'dashboard' }) {
 
   const [ambulance, setAmbulance] = useState(null)
   const [emergencies, setEmergencies] = useState([])
+  const [hospital, setHospital] = useState(null)
+  const [hospitalError, setHospitalError] = useState('')
 
   const [loading, setLoading] = useState(true)
   const [casesLoading, setCasesLoading] = useState(true)
@@ -330,6 +367,8 @@ export default function DriverDashboard({ view = 'dashboard' }) {
   const [error, setError] = useState('')
   const [caseError, setCaseError] = useState('')
   const [message, setMessage] = useState('')
+  const [statusError, setStatusError] = useState('')
+  const [statusSaving, setStatusSaving] = useState(false)
 
   const [coordinates, setCoordinates] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -372,6 +411,16 @@ export default function DriverDashboard({ view = 'dashboard' }) {
 
     return data
   }, [token, navigate])
+
+  const loadMyHospital = useCallback(async () => {
+    try {
+      const data = await authenticatedRequest('/team-member/hospital')
+      setHospital(data.hospital || null)
+      setHospitalError('')
+    } catch (err) {
+      setHospitalError(err.message || 'Unable to load hospital details')
+    }
+  }, [authenticatedRequest])
 
   const loadAmbulance = useCallback(async () => {
     if (!token) {
@@ -436,15 +485,17 @@ export default function DriverDashboard({ view = 'dashboard' }) {
   useEffect(() => {
     loadAmbulance()
     loadEmergencies(true)
-  }, [loadAmbulance, loadEmergencies])
+    loadMyHospital()
+  }, [loadAmbulance, loadEmergencies, loadMyHospital])
 
   useEffect(() => {
     const interval = setInterval(() => {
       loadEmergencies(false)
+      loadAmbulance()
     }, 10000)
 
     return () => clearInterval(interval)
-  }, [loadEmergencies])
+  }, [loadEmergencies, loadAmbulance])
 
   async function handleEmergencyAction(caseId, action) {
     const confirmation =
@@ -476,6 +527,51 @@ export default function DriverDashboard({ view = 'dashboard' }) {
       setCaseError(err.message)
     } finally {
       setBusyCase(null)
+    }
+  }
+
+  async function handleAmbulanceStatusChange(newStatus) {
+    if (!ambulance || statusSaving) return
+
+    const labels = {
+      available: 'Available',
+      on_call: 'On Call',
+      under_repair: 'Under Repair',
+      out_of_service: 'Out of Service'
+    }
+
+    const currentStatus = normalizeAmbulanceStatus(ambulance.status)
+
+    if (newStatus === currentStatus) return
+
+    const confirmed = window.confirm(
+      `Change ambulance status to ${labels[newStatus]}?`
+    )
+
+    if (!confirmed) return
+
+    setStatusSaving(true)
+    setStatusError('')
+    setMessage('')
+
+    try {
+      await authenticatedRequest('/cases/driver/ambulance/status', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      await loadAmbulance()
+      await loadEmergencies(false)
+
+      setMessage(
+        `Ambulance status updated to ${labels[newStatus]}.`
+      )
+    } catch (err) {
+      setStatusError(
+        err.message || 'Failed to update ambulance status'
+      )
+    } finally {
+      setStatusSaving(false)
     }
   }
 
@@ -527,7 +623,7 @@ export default function DriverDashboard({ view = 'dashboard' }) {
         }
       )
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
         throw new Error(
@@ -636,6 +732,7 @@ export default function DriverDashboard({ view = 'dashboard' }) {
       : 'No GPS updates yet'
 
   const status = ambulance?.status || 'Unknown'
+  const normalizedStatus = normalizeAmbulanceStatus(status)
 
   const titles = {
     dashboard: 'Driver Dashboard',
@@ -663,6 +760,83 @@ export default function DriverDashboard({ view = 'dashboard' }) {
         }}>
           MEDIRESCUE • AMBULANCE DRIVER
         </p>
+
+        <div style={{
+          ...card,
+          padding: '18px 22px',
+          marginBottom: 24,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap'
+        }}>
+          <div style={{
+            width: 52,
+            height: 52,
+            minWidth: 52,
+            borderRadius: 13,
+            background: '#eff6ff',
+            color: '#1d4ed8',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 27,
+            fontWeight: 800
+          }}>
+            ✚
+          </div>
+
+          <div style={{ flex: 1 }}>
+            <p style={{
+              color: palette.muted,
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: 1,
+              margin: '0 0 6px',
+              textTransform: 'uppercase'
+            }}>
+              YOUR ASSIGNED HOSPITAL
+            </p>
+
+            <h2 style={{
+              color: palette.navy,
+              fontSize: 22,
+              fontWeight: 800,
+              margin: 0
+            }}>
+              {hospital?.name || (
+                hospitalError ? 'Hospital unavailable' : 'Loading hospital...'
+              )}
+            </h2>
+
+            {hospital?.location && (
+              <p style={{
+                color: palette.muted,
+                fontSize: 15,
+                lineHeight: 1.7,
+                margin: '6px 0 0'
+              }}>
+                {hospital.location}
+              </p>
+            )}
+
+            {hospitalError && (
+              <button
+                type="button"
+                onClick={loadMyHospital}
+                style={{
+                  ...button,
+                  background: '#fff',
+                  color: palette.navy,
+                  border: `1px solid ${palette.border}`,
+                  fontSize: 13,
+                  marginTop: 10
+                }}
+              >
+                Retry Hospital Details
+              </button>
+            )}
+          </div>
+        </div>
 
         <h1 style={{
           ...heading,
@@ -793,8 +967,7 @@ export default function DriverDashboard({ view = 'dashboard' }) {
                   color: palette.muted,
                   fontSize: 13
                 }}>
-                  Automatically checks for new dispatches
-                  every 10 seconds.
+                  Automatically checks for new dispatches every 10 seconds.
                 </p>
               </div>
 
@@ -804,7 +977,10 @@ export default function DriverDashboard({ view = 'dashboard' }) {
                   ...button,
                   background: palette.navy
                 }}
-                onClick={() => loadEmergencies(true)}
+                onClick={() => {
+                  loadEmergencies(true)
+                  loadAmbulance()
+                }}
               >
                 ↻ Refresh Requests
               </button>
@@ -876,13 +1052,109 @@ export default function DriverDashboard({ view = 'dashboard' }) {
               <strong>Last GPS update:</strong> {lastSeen}
             </p>
 
-            <p style={{
-              color: palette.muted,
-              fontSize: 13
+            <div style={{
+              marginTop: 24,
+              padding: 20,
+              background: '#f8fafc',
+              border: `1px solid ${palette.border}`,
+              borderRadius: 12
             }}>
-              Ambulance availability is controlled by
-              the backend dispatch workflow.
-            </p>
+              <h3 style={heading}>Manage Ambulance Status</h3>
+
+              <p style={{
+                color: palette.muted,
+                lineHeight: 1.6
+              }}>
+                Choose your ambulance's operational status.
+                Ambulances handling active emergencies cannot
+                be marked available or taken out of service.
+              </p>
+
+              {statusError && (
+                <p role="alert" style={{
+                  background: '#fef2f2',
+                  color: '#b91c1c',
+                  padding: 12,
+                  borderRadius: 8
+                }}>
+                  {statusError}
+                </p>
+              )}
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit, minmax(min(100%, 190px), 1fr))',
+                gap: 12,
+                marginTop: 18
+              }}>
+                {ambulanceStatusOptions.map(option => {
+                  const selected = normalizedStatus === option.value
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={statusSaving || selected}
+                      onClick={() =>
+                        handleAmbulanceStatusChange(option.value)
+                      }
+                      style={{
+                        padding: 16,
+                        borderRadius: 10,
+                        border: selected
+                          ? `2px solid ${option.color}`
+                          : `1px solid ${palette.border}`,
+                        background: selected ? '#f0fdf4' : '#fff',
+                        color: option.color,
+                        textAlign: 'left',
+                        cursor: statusSaving || selected
+                          ? 'not-allowed'
+                          : 'pointer',
+                        opacity: statusSaving ? 0.65 : 1
+                      }}
+                    >
+                      <strong style={{
+                        display: 'block',
+                        fontSize: 15
+                      }}>
+                        {selected ? '✓ ' : ''}
+                        {option.label}
+                      </strong>
+
+                      <span style={{
+                        display: 'block',
+                        marginTop: 7,
+                        fontSize: 12,
+                        color: palette.muted
+                      }}>
+                        {option.description}
+                      </span>
+
+                      {selected && (
+                        <span style={{
+                          display: 'block',
+                          marginTop: 10,
+                          fontSize: 11,
+                          fontWeight: 800
+                        }}>
+                          CURRENT STATUS
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {statusSaving && (
+                <p role="status" style={{
+                  marginTop: 16,
+                  color: palette.muted
+                }}>
+                  Updating ambulance status...
+                </p>
+              )}
+            </div>
           </section>
         )}
 
@@ -898,8 +1170,7 @@ export default function DriverDashboard({ view = 'dashboard' }) {
 
               <p style={{ color: palette.muted }}>
                 Tracking is {tracking ? 'ACTIVE' : 'STOPPED'}.
-                Start tracking only when location sharing
-                is required.
+                Start tracking only when location sharing is required.
               </p>
 
               <div style={{
@@ -950,16 +1221,12 @@ export default function DriverDashboard({ view = 'dashboard' }) {
 
               <p>
                 <strong>Latitude:</strong>{' '}
-                {validCoords
-                  ? coordinates.latitude
-                  : 'Not available'}
+                {validCoords ? coordinates.latitude : 'Not available'}
               </p>
 
               <p>
                 <strong>Longitude:</strong>{' '}
-                {validCoords
-                  ? coordinates.longitude
-                  : 'Not available'}
+                {validCoords ? coordinates.longitude : 'Not available'}
               </p>
 
               <p>

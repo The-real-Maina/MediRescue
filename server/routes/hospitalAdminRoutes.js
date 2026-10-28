@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 
@@ -6,6 +7,9 @@ const controller = require('../controllers/hospitalAdminController');
 
 // Every route here is for hospital admins only.
 router.use(authenticate, authorize('hospital_admin'));
+
+// Hospital details for the logged-in admin
+router.get('/hospital', controller.getHospitalDetails);
 
 // Team overview and shifts
 router.get('/team', controller.getTeam);

@@ -1,29 +1,18 @@
-const pool = require('../config/db');
 
-// ==========================================
-// HOSPITAL STAFF AND DRIVERS: MY SHIFTS, LEAVE,
-// ABSENCES AND ANNOUNCEMENTS
-//
-// - Only hospital_staff and driver reach these
-//   handlers (see teamMemberRoutes.js).
-// - Every query is limited to the logged-in
-//   person's own records and own hospital.
-// ==========================================
+const pool = require('../config/db');
 
 const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'other'];
 const MAX_RANGE_DAYS = 62;
 const MAX_LEAVE_DAYS = 60;
 const ABSENCE_LOOKBACK_DAYS = 7;
 
-// ==========================================
 // HELPERS
-// ==========================================
 
 function formatDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return [y, m, d].join('-');
 }
 
 function isValidDate(value) {
@@ -34,11 +23,9 @@ function isValidDate(value) {
   const [y, m, d] = value.split('-').map(Number);
   const parsed = new Date(y, m - 1, d);
 
-  return (
-    parsed.getFullYear() === y &&
+  return parsed.getFullYear() === y &&
     parsed.getMonth() === m - 1 &&
-    parsed.getDate() === d
-  );
+    parsed.getDate() === d;
 }
 
 function addDays(dateString, days) {
@@ -49,12 +36,12 @@ function addDays(dateString, days) {
 function daysBetween(from, to) {
   const [fy, fm, fd] = from.split('-').map(Number);
   const [ty, tm, td] = to.split('-').map(Number);
-  const ms = new Date(ty, tm - 1, td) - new Date(fy, fm - 1, fd);
+  const ms = Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd);
   return Math.round(ms / 86400000);
 }
 
 function getHospitalId(req) {
-  const hospitalId = Number(req.user.hospital_id);
+  const hospitalId = Number(req.user?.hospital_id);
   return Number.isSafeInteger(hospitalId) && hospitalId > 0
     ? hospitalId
     : null;
@@ -71,11 +58,44 @@ function noHospital(res) {
   });
 }
 
-// ==========================================
-// MY SHIFTS (AND ANY APPROVED LEAVE IN THE SAME DATES)
+// MY HOSPITAL
+// GET /api/team-member/hospital
+
+exports.getMyHospital = async (req, res) => {
+  const hospitalId = getHospitalId(req);
+
+  if (!hospitalId) {
+    return noHospital(res);
+  }
+
+  try {
+    const [hospitals] = await pool.query(
+      `SELECT id, name, location
+       FROM hospital
+       WHERE id = ?
+       LIMIT 1`,
+      [hospitalId]
+    );
+
+    if (hospitals.length === 0) {
+      return res.status(404).json({
+        error: 'Your hospital could not be found'
+      });
+    }
+
+    return res.status(200).json({
+      hospital: hospitals[0]
+    });
+  } catch (err) {
+    console.error('Get my hospital error:', err);
+    return res.status(500).json({
+      error: 'Failed to retrieve your hospital'
+    });
+  }
+};
+
+// MY SHIFTS
 // GET /api/team-member/shifts?from=&to=
-// Defaults to today through the next 13 days.
-// ==========================================
 
 exports.getMyShifts = async (req, res) => {
   const hospitalId = getHospitalId(req);
@@ -132,21 +152,16 @@ exports.getMyShifts = async (req, res) => {
     `, [staffId, to, from]);
 
     return res.status(200).json({ from, to, shifts, leave });
-
   } catch (err) {
     console.error('Get my shifts error:', err);
-
     return res.status(500).json({
       error: 'Failed to retrieve your shifts'
     });
   }
 };
 
-// ==========================================
 // REQUEST LEAVE
 // POST /api/team-member/leave
-// { leave_type, start_date, end_date, reason }
-// ==========================================
 
 exports.requestLeave = async (req, res) => {
   const hospitalId = getHospitalId(req);
@@ -156,8 +171,9 @@ exports.requestLeave = async (req, res) => {
   const leaveType = req.body?.leave_type;
   const startDate = req.body?.start_date;
   const endDate = req.body?.end_date;
-  const reason =
-    typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  const reason = typeof req.body?.reason === 'string'
+    ? req.body.reason.trim()
+    : '';
 
   if (!LEAVE_TYPES.includes(leaveType)) {
     return res.status(400).json({
@@ -238,20 +254,16 @@ exports.requestLeave = async (req, res) => {
         status: 'pending'
       }
     });
-
   } catch (err) {
     console.error('Request leave error:', err);
-
     return res.status(500).json({
       error: 'Failed to send leave request'
     });
   }
 };
 
-// ==========================================
 // MY LEAVE REQUESTS
 // GET /api/team-member/leave
-// ==========================================
 
 exports.getMyLeave = async (req, res) => {
   const staffId = Number(req.user.id);
@@ -278,28 +290,25 @@ exports.getMyLeave = async (req, res) => {
     `, [staffId]);
 
     return res.status(200).json({ requests });
-
   } catch (err) {
     console.error('Get my leave error:', err);
-
     return res.status(500).json({
       error: 'Failed to retrieve your leave requests'
     });
   }
 };
 
-// ==========================================
 // CANCEL A PENDING LEAVE REQUEST
 // POST /api/team-member/leave/:id/cancel
-// Only your own request, and only while it is still pending.
-// ==========================================
 
 exports.cancelLeave = async (req, res) => {
   const staffId = Number(req.user.id);
   const leaveId = parseId(req.params.id);
 
   if (!leaveId) {
-    return res.status(400).json({ error: 'Invalid leave request ID' });
+    return res.status(400).json({
+      error: 'Invalid leave request ID'
+    });
   }
 
   try {
@@ -330,22 +339,16 @@ exports.cancelLeave = async (req, res) => {
     return res.status(200).json({
       message: 'Leave request cancelled'
     });
-
   } catch (err) {
     console.error('Cancel leave error:', err);
-
     return res.status(500).json({
       error: 'Failed to cancel leave request'
     });
   }
 };
 
-// ==========================================
 // REPORT AN ABSENCE
 // POST /api/team-member/absences
-// { absence_date, reason }
-// Allowed for today and the last 7 days. One per date.
-// ==========================================
 
 exports.reportAbsence = async (req, res) => {
   const hospitalId = getHospitalId(req);
@@ -353,8 +356,9 @@ exports.reportAbsence = async (req, res) => {
 
   const staffId = Number(req.user.id);
   const absenceDate = req.body?.absence_date;
-  const reason =
-    typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  const reason = typeof req.body?.reason === 'string'
+    ? req.body.reason.trim()
+    : '';
 
   if (!isValidDate(absenceDate)) {
     return res.status(400).json({
@@ -393,7 +397,6 @@ exports.reportAbsence = async (req, res) => {
     return res.status(201).json({
       message: 'Absence reported to your hospital admin'
     });
-
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({
@@ -402,17 +405,14 @@ exports.reportAbsence = async (req, res) => {
     }
 
     console.error('Report absence error:', err);
-
     return res.status(500).json({
       error: 'Failed to report absence'
     });
   }
 };
 
-// ==========================================
 // MY ABSENCE REPORTS
 // GET /api/team-member/absences
-// ==========================================
 
 exports.getMyAbsences = async (req, res) => {
   const staffId = Number(req.user.id);
@@ -433,22 +433,16 @@ exports.getMyAbsences = async (req, res) => {
     `, [staffId]);
 
     return res.status(200).json({ absences });
-
   } catch (err) {
     console.error('Get my absences error:', err);
-
     return res.status(500).json({
       error: 'Failed to retrieve your absence reports'
     });
   }
 };
 
-// ==========================================
 // ANNOUNCEMENTS FOR ME
 // GET /api/team-member/announcements
-// Shows posts from my hospital addressed to everyone
-// or to my own role.
-// ==========================================
 
 exports.getMyAnnouncements = async (req, res) => {
   const hospitalId = getHospitalId(req);
@@ -471,10 +465,8 @@ exports.getMyAnnouncements = async (req, res) => {
     `, [hospitalId, req.user.role]);
 
     return res.status(200).json({ announcements });
-
   } catch (err) {
     console.error('Get my announcements error:', err);
-
     return res.status(500).json({
       error: 'Failed to retrieve announcements'
     });

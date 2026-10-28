@@ -148,6 +148,7 @@ function ActionButton({ children, onClick, disabled, color = '#1d4ed8' }) {
 }
 
 const NAV = [
+  ['overview', 'Overview'],
   ['shifts', 'Team & Shifts'],
   ['leave', 'Leave Requests'],
   ['absences', 'Absence Reports'],
@@ -159,7 +160,9 @@ export default function HospitalAdminDashboard() {
   const today = formatDate(new Date())
   const monthStart = `${today.slice(0, 7)}-01`
 
-  const [section, setSection] = useState('shifts')
+  const [section, setSection] = useState('overview')
+  const [hospital, setHospital] = useState(null)
+  const [hospitalLoading, setHospitalLoading] = useState(true)
   const [date, setDate] = useState(today)
   const [team, setTeam] = useState([])
   const [shifts, setShifts] = useState([])
@@ -235,6 +238,9 @@ export default function HospitalAdminDashboard() {
     setLoading(true)
     setError('')
     try {
+      if (section === 'overview') {
+        await Promise.all([loadShifts(), loadLeave(), loadAbsences(), loadAnnouncements()])
+      }
       if (section === 'shifts') await loadShifts()
       if (section === 'leave') await loadLeave()
       if (section === 'absences') await loadAbsences()
@@ -249,6 +255,26 @@ export default function HospitalAdminDashboard() {
     section, loadShifts, loadLeave, loadAbsences,
     loadAttendance, loadAnnouncements
   ])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadHospital() {
+      setHospitalLoading(true)
+      try {
+        const data = await api(API, '/hospital')
+        if (!cancelled) setHospital(data.hospital || data)
+      } catch (err) {
+        if (!cancelled) setHospital(null)
+        console.error('Could not load hospital details:', err)
+      } finally {
+        if (!cancelled) setHospitalLoading(false)
+      }
+    }
+
+    loadHospital()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     reloadCurrent()
@@ -410,9 +436,19 @@ export default function HospitalAdminDashboard() {
 
   return (
     <div style={styles.page}>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={styles.heading}>Hospital Administration</h1>
-        <p style={styles.sub}>Manage hospital shifts, leave, attendance, absences and staff announcements.</p>
+      <div style={{
+        background: 'linear-gradient(135deg, #10243a 0%, #1d4ed8 100%)',
+        color: '#fff', borderRadius: 16, padding: '24px 26px', marginBottom: 20
+      }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: '#bfdbfe' }}>
+          Hospital Administration
+        </p>
+        <h1 style={{ margin: '0 0 8px', fontSize: 30, fontWeight: 900, lineHeight: 1.2 }}>
+          {hospitalLoading ? 'Loading hospital...' : hospital?.name || 'Hospital name unavailable'}
+        </h1>
+        <p style={{ margin: 0, fontSize: 13, color: '#dbeafe' }}>
+          {hospital?.location ? `${hospital.location} · ` : ''}Manage shifts, leave, attendance, absences and staff announcements.
+        </p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -439,6 +475,43 @@ export default function HospitalAdminDashboard() {
       )}
 
       {loading && <p style={{ ...styles.sub, marginBottom: 15 }}>Loading information...</p>}
+
+      {/* OVERVIEW */}
+      {section === 'overview' && (
+        <>
+          <div style={{ ...styles.card, background: '#f8fafc' }}>
+            <h2 style={{ ...styles.sectionTitle, fontSize: 19 }}>Hospital overview</h2>
+            <p style={{ ...styles.sub, marginBottom: 16 }}>
+              A quick view of staffing and pending HR matters for {hospital?.name || 'your hospital'}.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+              <SummaryCard label="Team members" value={team.length} color="#2563eb" />
+              <SummaryCard label="Day shift" value={dayCount} color="#d97706" />
+              <SummaryCard label="Night shift" value={nightCount} color="#4f46e5" />
+              <SummaryCard label="Pending leave requests" value={leaveRequests.filter((item) => item.status === 'pending').length} color="#0d9488" />
+              <SummaryCard label="Absences awaiting review" value={absences.filter((item) => item.status === 'reported').length} color="#dc2626" />
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.sectionTitle}>Quick actions</h2>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <button type="button" style={styles.primary} onClick={() => setSection('shifts')}>Manage Team & Shifts</button>
+              <button type="button" style={styles.button} onClick={() => setSection('leave')}>Review Leave Requests</button>
+              <button type="button" style={styles.button} onClick={() => setSection('absences')}>Review Absence Reports</button>
+              <button type="button" style={styles.button} onClick={() => setSection('attendance')}>View Attendance</button>
+              <button type="button" style={styles.button} onClick={() => setSection('announcements')}>Publish Announcement</button>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.sectionTitle}>Administration at a glance</h2>
+            <p style={{ ...styles.sub, lineHeight: 1.7 }}>
+              Assign day and night shifts, review leave applications and absence reports, check scheduled days and approved leave, and share announcements with hospital staff and drivers. Shift assignment remains subject to the server's approved-leave checks.
+            </p>
+          </div>
+        </>
+      )}
 
       {/* TEAM AND SHIFTS */}
       {section === 'shifts' && (

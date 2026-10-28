@@ -5,8 +5,6 @@ const EMERGENCY_SERVICE_NAME = 'Emergency Medical Response';
 
 // ==========================================
 // HELPER: FIND NEAREST HOSPITAL
-// Haversine distance between the patient and
-// every hospital that has coordinates.
 // ==========================================
 
 function findNearestHospital(hospitals, patientLat, patientLng) {
@@ -45,10 +43,10 @@ function findNearestHospital(hospitals, patientLat, patientLng) {
   return { nearestHospital, shortestDistance };
 }
 
-/**
- * PREVIEW NEAREST HOSPITAL
- * Does not create an emergency case or dispatch an ambulance.
- */
+// ==========================================
+// PREVIEW NEAREST HOSPITAL
+// ==========================================
+
 exports.getNearestHospital = async (req, res) => {
   const { pickup_lat, pickup_lng } = req.body || {};
 
@@ -118,11 +116,12 @@ exports.getNearestHospital = async (req, res) => {
 };
 
 // ==========================================
-// CREATE EMERGENCY CASE
+// CREATE EMERGENCY CASE WITH REROUTING
 // ==========================================
 
 exports.createCase = async (req, res) => {
   const patientId = req.user.id;
+
   const {
     emergency_type,
     emergency_desc,
@@ -172,6 +171,7 @@ exports.createCase = async (req, res) => {
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
+    // Find hospitals with valid GPS coordinates.
     const [hospitals] = await connection.query(`
       SELECT id, name, location, latitude, longitude
       FROM hospital
@@ -181,14 +181,67 @@ exports.createCase = async (req, res) => {
 
     if (hospitals.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         error: 'No hospitals with location information were found'
       });
     }
 
-    const { nearestHospital, shortestDistance } =
-      findNearestHospital(hospitals, patientLat, patientLng);
+    // A hospital is dispatch-ready when it has an available
+    // ambulance and a valid driver assigned to that hospital.
+    const [readyHospitals] = await connection.query(`
+      SELECT DISTINCT h.id
+      FROM hospital h
+      INNER JOIN ambulance a
+        ON a.hospital_id = h.id
+       AND a.status = 'available'
+       AND a.driver_id IS NOT NULL
+      INNER JOIN staff s
+        ON s.id = a.driver_id
+       AND s.hospital_id = h.id
+       AND s.role = 'driver'
+      WHERE h.latitude IS NOT NULL
+        AND h.longitude IS NOT NULL
+    `);
 
+    const readyHospitalIds = new Set(
+      readyHospitals.map(row => Number(row.id))
+    );
+
+    const {
+      nearestHospital: originallyNearestHospital,
+      shortestDistance: originalDistance
+    } = findNearestHospital(hospitals, patientLat, patientLng);
+
+    // Prefer the nearest hospital that can dispatch an ambulance.
+    // If none can, record the case at the geographically nearest
+    // hospital so the control room can intervene.
+    const dispatchReadyOptions = hospitals.filter(hospital =>
+      readyHospitalIds.has(Number(hospital.id))
+    );
+
+    let selectedHospital = originallyNearestHospital;
+    let selectedDistance = originalDistance;
+
+    const noAvailableAmbulanceAnywhere =
+      dispatchReadyOptions.length === 0;
+
+    if (dispatchReadyOptions.length > 0) {
+      const nearestReady = findNearestHospital(
+        dispatchReadyOptions,
+        patientLat,
+        patientLng
+      );
+
+      selectedHospital = nearestReady.nearestHospital;
+      selectedDistance = nearestReady.shortestDistance;
+    }
+
+    const wasRerouted =
+      Number(selectedHospital.id) !==
+      Number(originallyNearestHospital.id);
+
+    // Use the price belonging to the selected hospital.
     const [prices] = await connection.query(`
       SELECT amount
       FROM hospital_service_prices
@@ -197,17 +250,15 @@ exports.createCase = async (req, res) => {
         AND severity = ?
       LIMIT 1
     `, [
-      nearestHospital.id,
+      selectedHospital.id,
       EMERGENCY_SERVICE_NAME,
       normalizedSeverity
     ]);
 
-    // A missing price must never block a patient who needs help,
-    // but it should be visible in the server log.
     if (prices.length === 0) {
       console.warn(
         `No "${EMERGENCY_SERVICE_NAME}" price found for hospital ` +
-        `${nearestHospital.id} and severity "${normalizedSeverity}". ` +
+        `${selectedHospital.id} and severity "${normalizedSeverity}". ` +
         'Case will be created without a payment amount.'
       );
     }
@@ -231,7 +282,7 @@ exports.createCase = async (req, res) => {
       VALUES (?, ?, ?, 'requested', ?, ?, ?, ?, NOW())
     `, [
       patientId,
-      nearestHospital.id,
+      selectedHospital.id,
       emergency_desc || emergency_type,
       normalizedSeverity,
       paymentAmount,
@@ -249,32 +300,59 @@ exports.createCase = async (req, res) => {
 
     await connection.commit();
 
+    let message = 'Emergency request sent successfully';
+
+    if (wasRerouted) {
+      message =
+        'The nearest hospital has no dispatch-ready ambulance. ' +
+        'Your request was rerouted to the nearest hospital with ' +
+        'an available ambulance and driver.';
+    } else if (noAvailableAmbulanceAnywhere) {
+      message =
+        'Emergency request recorded at the nearest hospital, but ' +
+        'no hospital currently has a dispatch-ready ambulance. ' +
+        'Urgent control-room assistance is required.';
+    }
+
     return res.status(201).json({
-      message: 'Emergency request sent successfully',
+      message,
       case_id: caseId,
       status: 'requested',
       severity: normalizedSeverity,
       payment_amount: paymentAmount,
+
       hospital: {
-        id: nearestHospital.id,
-        name: nearestHospital.name,
-        location: nearestHospital.location
+        id: selectedHospital.id,
+        name: selectedHospital.name,
+        location: selectedHospital.location
       },
-      distance_km: Number(shortestDistance.toFixed(2))
+
+      distance_km: Number(selectedDistance.toFixed(2)),
+      rerouted: wasRerouted,
+
+      original_nearest_hospital: {
+        id: originallyNearestHospital.id,
+        name: originallyNearestHospital.name,
+        location: originallyNearestHospital.location,
+        distance_km: Number(originalDistance.toFixed(2))
+      },
+
+      no_available_ambulance: noAvailableAmbulanceAnywhere
     });
 
   } catch (err) {
     if (connection) await connection.rollback();
+
     console.error('Create case error:', err);
 
     return res.status(500).json({
       error: 'Failed to create emergency case'
     });
+
   } finally {
     if (connection) connection.release();
   }
 };
-
 // ==========================================
 // PATIENT: GET MY CASES
 // ==========================================
@@ -367,7 +445,6 @@ exports.updateCaseStatus = async (req, res) => {
   const staffId = req.user.id;
   const hospitalId = req.user.hospital_id;
 
-  // Normalize the incoming status.
   const rawStatus = req.body?.status;
   const status = typeof rawStatus === 'string'
     ? rawStatus.trim()
@@ -385,7 +462,6 @@ exports.updateCaseStatus = async (req, res) => {
     });
   }
 
-  // Hospital staff cannot manually mark payment as paid.
   if (status === 'paid') {
     return res.status(403).json({
       error: 'Payment must be verified before marking a case as paid'
@@ -446,12 +522,7 @@ exports.updateCaseStatus = async (req, res) => {
       });
     }
 
-    // ==========================================
-    // PAYMENT AMOUNT SAFEGUARD
-    // A case must never reach payment_pending
-    // without a charge the patient can pay.
-    // ==========================================
-
+    // Ensure a valid payment amount exists before payment_pending.
     let amountToSet = null;
 
     if (status === 'payment_pending') {
@@ -485,10 +556,7 @@ exports.updateCaseStatus = async (req, res) => {
       }
     }
 
-    // ==========================================
-    // PAYMENT INTEGRITY CHECK
-    // ==========================================
-
+    // A case cannot close without an eligible completed payment.
     if (status === 'closed') {
       const allowSimulation =
         process.env.NODE_ENV === 'development' &&
@@ -556,6 +624,7 @@ exports.updateCaseStatus = async (req, res) => {
       staffId
     ]);
 
+    // Release the ambulance when the case is closed.
     if (status === 'closed' && emergencyCase.ambulance_id) {
       await connection.query(`
         UPDATE ambulance
@@ -581,11 +650,13 @@ exports.updateCaseStatus = async (req, res) => {
 
   } catch (err) {
     if (connection) await connection.rollback();
+
     console.error('Update case status error:', err);
 
     return res.status(500).json({
       error: 'Failed to update case status'
     });
+
   } finally {
     if (connection) connection.release();
   }
@@ -755,16 +826,17 @@ exports.assignAmbulance = async (req, res) => {
 
   } catch (err) {
     if (connection) await connection.rollback();
+
     console.error('Assign ambulance error:', err);
 
     return res.status(500).json({
       error: 'Failed to assign ambulance'
     });
+
   } finally {
     if (connection) connection.release();
   }
 };
-
 // ==========================================
 // DRIVER: GET ASSIGNED CASES
 // ==========================================
@@ -935,11 +1007,13 @@ exports.confirmDriverPickup = async (req, res) => {
 
   } catch (err) {
     if (connection) await connection.rollback();
+
     console.error('Confirm driver pickup error:', err);
 
     return res.status(500).json({
       error: 'Failed to confirm patient pickup'
     });
+
   } finally {
     if (connection) connection.release();
   }
@@ -1043,11 +1117,13 @@ exports.confirmHospitalArrival = async (req, res) => {
 
   } catch (err) {
     if (connection) await connection.rollback();
+
     console.error('Confirm hospital arrival error:', err);
 
     return res.status(500).json({
       error: 'Failed to confirm hospital arrival'
     });
+
   } finally {
     if (connection) connection.release();
   }
@@ -1142,12 +1218,225 @@ exports.confirmPatientHandover = async (req, res) => {
 
   } catch (err) {
     if (connection) await connection.rollback();
+
     console.error('Confirm patient handover error:', err);
 
     return res.status(500).json({
       error: 'Failed to confirm patient handover'
     });
+
   } finally {
     if (connection) connection.release();
+  }
+};
+
+ 
+ // ==========================================
+ // DRIVER: UPDATE OWN AMBULANCE STATUS
+ // ==========================================
+
+exports.updateDriverAmbulanceStatus = async (req, res) => {
+  const driverId = Number(req.user.id);
+  const hospitalId = Number(req.user.hospital_id);
+
+  const requestedStatus =
+    typeof req.body?.status === 'string'
+      ? req.body.status.trim().toLowerCase()
+      : '';
+
+  const validStatuses = [
+    'available',
+    'on_call',
+    'under_repair',
+    'out_of_service'
+  ];
+
+  if (
+    !Number.isSafeInteger(driverId) ||
+    driverId <= 0 ||
+    !Number.isSafeInteger(hospitalId) ||
+    hospitalId <= 0
+  ) {
+    return res.status(403).json({
+      error: 'Invalid driver hospital assignment'
+    });
+  }
+
+  if (!validStatuses.includes(requestedStatus)) {
+    return res.status(400).json({
+      error: 'Invalid ambulance status',
+      allowed_statuses: validStatuses
+    });
+  }
+
+  // The database uses "dispatched" to represent "on_call".
+  const databaseStatus =
+    requestedStatus === 'on_call'
+      ? 'dispatched'
+      : requestedStatus;
+
+  let connection;
+
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Find and lock the ambulance assigned to this driver.
+    const [ambulances] = await connection.query(`
+      SELECT id, plate_number, status, driver_id, hospital_id
+      FROM ambulance
+      WHERE driver_id = ?
+        AND hospital_id = ?
+      FOR UPDATE
+    `, [driverId, hospitalId]);
+
+    if (ambulances.length === 0) {
+      await connection.rollback();
+
+      return res.status(404).json({
+        error: 'No ambulance is assigned to this driver'
+      });
+    }
+
+    if (ambulances.length > 1) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        error:
+          'Multiple ambulances are assigned to this driver. ' +
+          'Please resolve the assignment before changing status.'
+      });
+    }
+
+    const ambulance = ambulances[0];
+
+    // Check whether this ambulance has an active emergency.
+    const [activeCases] = await connection.query(`
+      SELECT id, status
+      FROM \`case\`
+      WHERE ambulance_id = ?
+        AND hospital_id = ?
+        AND status IN (
+          'dispatched',
+          'picked_up',
+          'arrived_at_hospital',
+          'handed_over',
+          'in_treatment',
+          'payment_pending'
+        )
+      LIMIT 1
+      FOR UPDATE
+    `, [ambulance.id, hospitalId]);
+
+    const hasActiveCase = activeCases.length > 0;
+
+    // An active ambulance cannot be marked available or unavailable.
+    if (
+      hasActiveCase &&
+      ['available', 'under_repair', 'out_of_service']
+        .includes(requestedStatus)
+    ) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        error:
+          'This ambulance has an active emergency case. ' +
+          'Its status cannot be changed until the case is completed.',
+        active_case_id: activeCases[0].id,
+        active_case_status: activeCases[0].status
+      });
+    }
+
+    // Only hospital staff dispatch an ambulance to a case.
+    if (requestedStatus === 'on_call' && !hasActiveCase) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        error:
+          'An ambulance can be marked On Call only when it has ' +
+          'an active emergency case. Assign a case through hospital staff.'
+      });
+    }
+
+    // Detect an inconsistent dispatched status.
+    if (
+      ambulance.status === 'dispatched' &&
+      !hasActiveCase &&
+      requestedStatus !== 'available'
+    ) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        error:
+          'This ambulance is marked dispatched but has no active case. ' +
+          'Please resolve the inconsistent assignment first.'
+      });
+    }
+
+    // Update only the authenticated driver's assigned ambulance.
+    const [updateResult] = await connection.query(`
+      UPDATE ambulance
+      SET status = ?
+      WHERE id = ?
+        AND driver_id = ?
+        AND hospital_id = ?
+    `, [
+      databaseStatus,
+      ambulance.id,
+      driverId,
+      hospitalId
+    ]);
+
+    if (updateResult.affectedRows !== 1) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        error: 'Ambulance status was not changed. Please refresh and retry.'
+      });
+    }
+
+    await connection.commit();
+
+    return res.status(200).json({
+      message: 'Ambulance status updated successfully',
+      ambulance: {
+        id: ambulance.id,
+        plate_number: ambulance.plate_number,
+        status: requestedStatus,
+        database_status: databaseStatus
+      }
+    });
+
+  } catch (err) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        console.error(
+          'Ambulance status rollback error:',
+          rollbackError.message
+        );
+      }
+    }
+
+    // Temporary diagnostics to identify the actual failure.
+    console.error('Update driver ambulance status error:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlMessage: err.sqlMessage,
+      sqlState: err.sqlState
+    });
+
+    return res.status(500).json({
+      error: 'Failed to update ambulance status',
+      details: err.sqlMessage || err.message,
+      code: err.code || null
+    });
+
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 };

@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap'
@@ -485,6 +484,8 @@ export default function StaffDashboard({ view = 'dashboard' }) {
   const navigate = useNavigate()
 
   const [cases, setCases] = useState([])
+  const [hospital, setHospital] = useState(null)
+  const [hospitalError, setHospitalError] = useState('')
   const [ambulances, setAmbulances] = useState([])
   const [ambulanceStatuses, setAmbulanceStatuses] = useState({})
   const [selectedAmbulances, setSelectedAmbulances] = useState({})
@@ -530,6 +531,16 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
     return data
   }, [navigate])
+
+  const loadMyHospital = useCallback(async () => {
+    try {
+      const data = await request('/team-member/hospital')
+      setHospital(data.hospital || null)
+      setHospitalError('')
+    } catch (err) {
+      setHospitalError(err.message || 'Unable to load hospital details')
+    }
+  }, [request])
 
   const loadDashboard = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -609,7 +620,8 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
   useEffect(() => {
     loadDashboard()
-  }, [loadDashboard])
+    loadMyHospital()
+  }, [loadDashboard, loadMyHospital])
 
   useEffect(() => {
     if (view !== 'tracking') return
@@ -829,6 +841,70 @@ export default function StaffDashboard({ view = 'dashboard' }) {
           <p style={styles.eyebrow}>
             EMERGENCY RESPONSE CONTROL CENTER
           </p>
+
+          <div
+            style={{
+              ...styles.card,
+              padding: '18px 22px',
+              marginBottom: 24,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: 'wrap'
+            }}
+          >
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                minWidth: 52,
+                borderRadius: 13,
+                background: '#eff6ff',
+                color: '#1d4ed8',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 27,
+                fontWeight: 800
+              }}
+            >
+              ✚
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <p style={{ ...styles.label, marginBottom: 6 }}>
+                YOUR ASSIGNED HOSPITAL
+              </p>
+
+              <h2
+                style={{
+                  color: COLORS.navy,
+                  fontSize: 22,
+                  fontWeight: 800,
+                  margin: 0
+                }}
+              >
+                {hospital?.name || (
+                  hospitalError ? 'Hospital unavailable' : 'Loading hospital...'
+                )}
+              </h2>
+
+              {hospital?.location && (
+                <p style={{ ...styles.subtitle, marginTop: 6 }}>
+                  {hospital.location}
+                </p>
+              )}
+
+              {hospitalError && (
+                <button
+                  type="button"
+                  onClick={loadMyHospital}
+                  style={{ ...styles.secondaryButton, marginTop: 10 }}
+                >
+                  Retry Hospital Details
+                </button>
+              )}
+            </div>
+          </div>
 
           <h1 style={styles.title}>
             {viewTitles[view] || viewTitles.cases}

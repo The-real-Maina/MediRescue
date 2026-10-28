@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import ThemeToggle from '../components/ThemeToggle'
 
 const API_URL = 'http://localhost:5000/api/auth'
 
@@ -13,8 +14,8 @@ const initialForm = {
 const styles = {
   page: {
     minHeight: '100vh',
-    background: '#f1f5f9',
-    color: '#10243a',
+    background: 'var(--bg)',
+    color: 'var(--text)',
     fontFamily: "'Segoe UI', Arial, sans-serif",
     padding: '32px 16px',
     boxSizing: 'border-box'
@@ -22,12 +23,13 @@ const styles = {
   container: {
     maxWidth: 1100,
     margin: '0 auto',
-    background: '#ffffff',
+    background: 'var(--surface)',
     borderRadius: 20,
     overflow: 'hidden',
-    boxShadow: '0 20px 60px rgba(15,23,42,0.1)',
-    border: '1px solid #e2e8f0'
+    boxShadow: 'var(--shadow-modal)',
+    border: '1px solid var(--border)'
   },
+  // The header stays dark in both themes
   header: {
     background: 'linear-gradient(135deg, #10243a, #173b58)',
     padding: '30px clamp(20px, 5vw, 48px)',
@@ -47,42 +49,42 @@ const styles = {
     marginBottom: 8,
     fontSize: 13,
     fontWeight: 700,
-    color: '#334155'
+    color: 'var(--text)'
   },
   input: {
     width: '100%',
     minHeight: 48,
     padding: '12px 14px',
     borderRadius: 10,
-    border: '1px solid #cbd5e1',
-    background: '#ffffff',
-    color: '#10243a',
+    border: '1px solid var(--input-border)',
+    background: 'var(--input-bg)',
+    color: 'var(--text)',
     fontFamily: 'inherit',
     fontSize: 14,
     boxSizing: 'border-box',
-    outlineColor: '#dc2626'
+    outlineColor: 'var(--primary)'
   },
   section: {
     marginTop: 30,
     paddingTop: 25,
-    borderTop: '1px solid #e2e8f0'
+    borderTop: '1px solid var(--border)'
   },
   sectionTitle: {
     margin: '0 0 8px',
-    color: '#10243a',
+    color: 'var(--heading)',
     fontSize: 19,
     fontWeight: 800
   },
   sectionDescription: {
     margin: '0 0 22px',
-    color: '#64748b',
+    color: 'var(--text-muted)',
     fontSize: 13,
     lineHeight: 1.6
   },
   submit: {
     border: 'none',
-    background: '#dc2626',
-    color: '#ffffff',
+    background: 'var(--primary)',
+    color: 'var(--text-on-primary)',
     padding: '15px 26px',
     borderRadius: 10,
     fontWeight: 800,
@@ -234,7 +236,7 @@ function Register() {
         disabled={loading || otpStep}
         style={{
           ...styles.input,
-          background: otpStep ? '#f1f5f9' : '#ffffff'
+          background: otpStep ? 'var(--surface-alt)' : 'var(--input-bg)'
         }}
       />
     </div>
@@ -242,6 +244,8 @@ function Register() {
 
   return (
     <div style={styles.page}>
+      <ThemeToggle floating />
+
       <main style={styles.container}>
         <header style={styles.header}>
           <div
@@ -349,13 +353,13 @@ function Register() {
               style={{
                 margin: '0 0 7px',
                 fontSize: 23,
-                color: '#10243a'
+                color: 'var(--heading)'
               }}
             >
               {otpStep ? 'Phone Verification' : 'Patient Information'}
             </h2>
 
-            <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>
               {otpStep
                 ? 'Check your SMS messages and enter your verification code.'
                 : 'Complete the details below to begin registration.'}
@@ -366,9 +370,9 @@ function Register() {
             <div
               role="alert"
               style={{
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#b91c1c',
+                background: 'var(--danger-soft)',
+                border: '1px solid var(--danger-border)',
+                color: 'var(--danger)',
                 padding: 15,
                 borderRadius: 10,
                 marginBottom: 24,
@@ -383,9 +387,9 @@ function Register() {
             <div
               role="status"
               style={{
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                color: '#166534',
+                background: 'var(--success-soft)',
+                border: '1px solid var(--success-border)',
+                color: 'var(--success-text)',
                 padding: 15,
                 borderRadius: 10,
                 marginBottom: 24,
@@ -468,7 +472,7 @@ function Register() {
                     alignItems: 'center',
                     gap: 8,
                     marginTop: 15,
-                    color: '#475569',
+                    color: 'var(--text-muted)',
                     fontSize: 13,
                     cursor: 'pointer'
                   }}
@@ -487,7 +491,7 @@ function Register() {
               <p
                 style={{
                   margin: '28px 0 0',
-                  color: '#64748b',
+                  color: 'var(--text-muted)',
                   fontSize: 13,
                   lineHeight: 1.6
                 }}
@@ -499,7 +503,7 @@ function Register() {
                 style={{
                   marginTop: 35,
                   paddingTop: 25,
-                  borderTop: '1px solid #e2e8f0',
+                  borderTop: '1px solid var(--border)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -507,12 +511,12 @@ function Register() {
                   gap: 18
                 }}
               >
-                <div style={{ color: '#64748b', fontSize: 13 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
                   Already registered?{' '}
                   <Link
                     to="/login"
                     style={{
-                      color: '#dc2626',
+                      color: 'var(--primary-text)',
                       fontWeight: 800,
                       textDecoration: 'none'
                     }}
@@ -568,7 +572,7 @@ function Register() {
               <p
                 style={{
                   marginTop: 16,
-                  color: '#64748b',
+                  color: 'var(--text-muted)',
                   fontSize: 13,
                   lineHeight: 1.6
                 }}
@@ -597,8 +601,9 @@ function Register() {
                   }}
                   style={{
                     ...styles.submit,
-                    background: '#e2e8f0',
-                    color: '#10243a'
+                    background: 'var(--surface-alt)',
+                    color: 'var(--heading)',
+                    border: '1px solid var(--border)'
                   }}
                 >
                   ← Back
@@ -623,7 +628,7 @@ function Register() {
             <Link
               to="/"
               style={{
-                color: '#64748b',
+                color: 'var(--text-muted)',
                 fontSize: 13,
                 fontWeight: 700,
                 textDecoration: 'none'

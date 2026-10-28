@@ -4,6 +4,9 @@ import { FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, FaChevronDown,
 
 const changePasswordItem = { title: 'Change Password', icon: FaKey, path: '/change-password' }
 
+// Patients use their own route so the page opens inside the patient layout.
+const patientChangePasswordItem = { title: 'Change Password', icon: FaKey, path: '/patient/change-password' }
+
 const menus = {
   super_admin: [
     { title: 'Dashboard', icon: FaTachometerAlt, path: '/admin-dashboard' },
@@ -43,7 +46,8 @@ const menus = {
     { title: 'Request Emergency', icon: FaFirstAid, path: '/emergency-request' },
     { title: 'My Emergency Cases', icon: FaHistory, path: '/my-cases' },
     { title: 'My Health Profile', icon: FaNotesMedical, path: '/health-profile' },
-    { title: 'Payments', icon: FaCreditCard, path: '/pay-now' }
+    { title: 'Payments', icon: FaCreditCard, path: '/pay-now' },
+    patientChangePasswordItem
   ]
 }
 

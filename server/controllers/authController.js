@@ -1,3 +1,4 @@
+
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -5,7 +6,7 @@ const crypto = require('crypto');
 const { sendOtpSms } = require('../services/smsService');
 
 // ==========================================
-// REGISTER PATIENT
+// PATIENT REGISTRATION (DIRECT)
 // ==========================================
 
 exports.registerPatient = async (req, res) => {
@@ -48,17 +49,11 @@ exports.registerPatient = async (req, res) => {
 
     const [result] = await pool.query(
       `INSERT INTO patient
-      (
-        name,
-        phone,
-        password_hash,
-        blood_type,
-        allergies,
-        chronic_conditions,
-        next_of_kin_name,
-        next_of_kin_phone
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (
+         name, phone, password_hash, blood_type, allergies,
+         chronic_conditions, next_of_kin_name, next_of_kin_phone
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         phone,
@@ -73,35 +68,27 @@ exports.registerPatient = async (req, res) => {
 
     return res.status(201).json({
       message: 'Patient registered successfully',
-      patient: {
-        id: result.insertId,
-        name,
-        phone
-      }
+      patient: { id: result.insertId, name, phone }
     });
   } catch (err) {
     console.error('Registration error:', err);
-
     return res.status(500).json({
       error: 'Patient registration failed'
     });
   }
 };
 
-
 // ==========================================
 // LOGIN
-// PATIENT, HOSPITAL STAFF, HOSPITAL ADMIN,
-// SUPER ADMIN, DRIVER
+// Patients and super admins use password login.
+// Staff, hospital admins and drivers require OTP.
 // ==========================================
 
 exports.login = async (req, res) => {
   const { email, phone, password, role } = req.body || {};
 
   if (!password || typeof password !== 'string') {
-    return res.status(400).json({
-      error: 'Password is required'
-    });
+    return res.status(400).json({ error: 'Password is required' });
   }
 
   const allowedRoles = [
@@ -113,21 +100,15 @@ exports.login = async (req, res) => {
   ];
 
   if (!allowedRoles.includes(role)) {
-    return res.status(400).json({
-      error: 'Invalid login role'
-    });
+    return res.status(400).json({ error: 'Invalid login role' });
   }
 
   if (role === 'patient' && !phone) {
-    return res.status(400).json({
-      error: 'Phone number is required'
-    });
+    return res.status(400).json({ error: 'Phone number is required' });
   }
 
   if (role !== 'patient' && !email) {
-    return res.status(400).json({
-      error: 'Email address is required'
-    });
+    return res.status(400).json({ error: 'Email address is required' });
   }
 
   try {
@@ -138,76 +119,103 @@ exports.login = async (req, res) => {
         'SELECT * FROM patient WHERE phone = ?',
         [phone]
       );
-    } else if (role === 'hospital_staff') {
-      [rows] = await pool.query(
-        `SELECT * FROM staff
-         WHERE email = ?
-         AND role = 'hospital_staff'`,
-        [email]
-      );
-    } else if (role === 'hospital_admin') {
-      [rows] = await pool.query(
-        `SELECT * FROM staff
-         WHERE email = ?
-         AND role = 'hospital_admin'`,
-        [email]
-      );
-    } else if (role === 'driver') {
-      [rows] = await pool.query(
-        `SELECT * FROM staff
-         WHERE email = ?
-         AND role = 'driver'`,
-        [email]
-      );
     } else if (role === 'super_admin') {
       [rows] = await pool.query(
         `SELECT * FROM admin
-         WHERE email = ?
-         AND role = 'super_admin'`,
+         WHERE email = ? AND role = 'super_admin'`,
         [email]
+      );
+    } else {
+      [rows] = await pool.query(
+        'SELECT * FROM staff WHERE email = ? AND role = ?',
+        [email, role]
       );
     }
 
-    if (rows.length === 0) {
-      return res.status(401).json({
-        error: 'Invalid credentials'
-      });
+    if (!rows.length) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const user = rows[0];
-
-    const match = await bcrypt.compare(
+    const passwordMatches = await bcrypt.compare(
       password,
       user.password_hash
     );
 
-    if (!match) {
-      return res.status(401).json({
-        error: 'Invalid credentials'
-      });
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Released accounts cannot log in. This is checked after the
-    // password so the account's status is only revealed to someone
-    // who knows the password.
     if (
       ['hospital_staff', 'hospital_admin', 'driver'].includes(role) &&
-      Number(user.is_active) === 0
+      Number(user.is_active) !== 1
     ) {
       return res.status(403).json({
-        error:
-          'This account has been deactivated. ' +
-          'Please contact your administrator.'
+        error: 'This account has been deactivated. Please contact your administrator.'
       });
     }
 
-    const userRole =
-      role === 'patient' ? 'patient' : user.role;
+    // Second authentication step for staff, hospital admins and drivers.
+    if (['hospital_staff', 'hospital_admin', 'driver'].includes(role)) {
+      if (
+        process.env.NODE_ENV === 'production' ||
+        process.env.OTP_DELIVERY_MODE !== 'terminal'
+      ) {
+        return res.status(503).json({
+          error: 'Staff OTP delivery is not configured.'
+        });
+      }
 
-    const hospitalId =
-      ['hospital_staff', 'hospital_admin', 'driver'].includes(userRole)
-        ? user.hospital_id
-        : null;
+      const [recentRequests] = await pool.query(
+        `SELECT COUNT(*) AS total
+         FROM staff_login_otp
+         WHERE staff_id = ?
+           AND role = ?
+           AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)`,
+        [user.id, role]
+      );
+
+      if (Number(recentRequests[0].total) >= 3) {
+        return res.status(429).json({
+          error: 'Too many OTP requests. Please wait 10 minutes before trying again.'
+        });
+      }
+
+      const code = String(crypto.randomInt(100000, 1000000));
+      const codeHash = await bcrypt.hash(code, 10);
+
+      await pool.query(
+        `UPDATE staff_login_otp
+         SET used = 1
+         WHERE staff_id = ? AND role = ? AND used = 0`,
+        [user.id, role]
+      );
+
+      const [result] = await pool.query(
+        `INSERT INTO staff_login_otp
+         (staff_id, role, code_hash, expires_at)
+         VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+        [user.id, role, codeHash]
+      );
+
+      console.log('\n========================================');
+      console.log('MEDIRESCUE STAFF LOGIN OTP');
+      console.log(`Role: ${role}`);
+      console.log(`Challenge ID: ${result.insertId}`);
+      console.log(`OTP: ${code}`);
+      console.log('Expires in: 5 minutes');
+      console.log('========================================\n');
+
+      return res.status(200).json({
+        message: 'Password accepted. Enter the OTP shown in the development server terminal.',
+        requiresOtp: true,
+        challengeId: result.insertId
+      });
+    }
+
+    // Existing direct-login path for patients and super admins.
+    const userRole = role === 'patient' ? 'patient' : user.role;
+    const hospitalId = null;
 
     const token = jwt.sign(
       {
@@ -216,9 +224,7 @@ exports.login = async (req, res) => {
         hospital_id: hospitalId
       },
       process.env.JWT_SECRET,
-      {
-        expiresIn: '8h'
-      }
+      { expiresIn: '8h' }
     );
 
     return res.status(200).json({
@@ -234,16 +240,163 @@ exports.login = async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
-
     return res.status(500).json({
       error: 'Login failed. Please try again.'
     });
   }
 };
 
-
+// ==========================================
+// VERIFY STAFF LOGIN OTP
+// POST /api/auth/staff-otp/verify
+// Body: { challengeId, code }
 // ==========================================
 
+exports.verifyStaffLoginOtp = async (req, res) => {
+  const { challengeId, code } = req.body || {};
+
+  if (
+    !Number.isSafeInteger(Number(challengeId)) ||
+    Number(challengeId) < 1 ||
+    typeof code !== 'string' ||
+    !/^\d{6}$/.test(code.trim())
+  ) {
+    return res.status(400).json({
+      error: 'A valid challenge ID and six-digit OTP are required.'
+    });
+  }
+
+  if (
+    process.env.NODE_ENV === 'production' ||
+    process.env.OTP_DELIVERY_MODE !== 'terminal'
+  ) {
+    return res.status(503).json({
+      error: 'Staff OTP delivery is not configured.'
+    });
+  }
+
+  let connection;
+
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query(
+      `SELECT *
+       FROM staff_login_otp
+       WHERE id = ?
+       FOR UPDATE`,
+      [Number(challengeId)]
+    );
+
+    if (!rows.length) {
+      await connection.rollback();
+      return res.status(401).json({ error: 'Invalid or expired OTP.' });
+    }
+
+    const otp = rows[0];
+    const allowedRoles = ['hospital_staff', 'hospital_admin', 'driver'];
+
+    if (
+      !allowedRoles.includes(otp.role) ||
+      Number(otp.used) === 1 ||
+      new Date(otp.expires_at) <= new Date()
+    ) {
+      await connection.rollback();
+      return res.status(401).json({ error: 'Invalid or expired OTP.' });
+    }
+
+    if (Number(otp.attempts) >= 5) {
+      await connection.query(
+        'UPDATE staff_login_otp SET used = 1 WHERE id = ?',
+        [otp.id]
+      );
+      await connection.commit();
+
+      return res.status(429).json({
+        error: 'Too many incorrect attempts. Please log in again to request a new OTP.'
+      });
+    }
+
+    const matches = await bcrypt.compare(code.trim(), otp.code_hash);
+
+    if (!matches) {
+      const attempts = Number(otp.attempts) + 1;
+
+      await connection.query(
+        'UPDATE staff_login_otp SET attempts = ?, used = ? WHERE id = ?',
+        [attempts, attempts >= 5 ? 1 : 0, otp.id]
+      );
+
+      await connection.commit();
+
+      return res.status(attempts >= 5 ? 429 : 401).json({
+        error: attempts >= 5
+          ? 'Too many incorrect attempts. Please log in again to request a new OTP.'
+          : 'Invalid or expired OTP.'
+      });
+    }
+
+    await connection.query(
+      'UPDATE staff_login_otp SET used = 1 WHERE id = ?',
+      [otp.id]
+    );
+
+    await connection.commit();
+
+    const [staffRows] = await pool.query(
+      'SELECT * FROM staff WHERE id = ? AND role = ?',
+      [otp.staff_id, otp.role]
+    );
+
+    if (!staffRows.length || Number(staffRows[0].is_active) !== 1) {
+      return res.status(403).json({
+        error: 'This account is unavailable or deactivated. Please contact your administrator.'
+      });
+    }
+
+    const user = staffRows[0];
+    const hospitalId = user.hospital_id ?? null;
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        role: user.role,
+        hospital_id: hospitalId
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        hospital_id: hospitalId,
+        must_change_password: Number(user.must_change_password) === 1
+      }
+    });
+  } catch (err) {
+    if (connection) {
+      await connection.rollback().catch(() => {});
+    }
+
+    console.error('Staff OTP verification error:', err);
+
+    return res.status(500).json({
+      error: 'OTP verification failed. Please try again.'
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+// ==========================================
+// PATIENT REGISTRATION OTP
+// ==========================================
 
 const REGISTRATION_OTP_EXPIRY_MINUTES = 5;
 const REGISTRATION_OTP_MAX_ATTEMPTS = 5;
@@ -265,9 +418,7 @@ exports.requestRegistrationOtp = async (req, res) => {
   }
 
   if (confirmPassword !== undefined && password !== confirmPassword) {
-    return res.status(400).json({
-      error: 'Passwords do not match.'
-    });
+    return res.status(400).json({ error: 'Passwords do not match.' });
   }
 
   const cleanName = name.trim();
@@ -289,7 +440,6 @@ exports.requestRegistrationOtp = async (req, res) => {
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = await bcrypt.hash(code, 10);
 
-    // Replace any previous pending registration for this phone.
     await pool.query(
       'DELETE FROM pending_patient_registration WHERE phone = ?',
       [cleanPhone]
@@ -315,10 +465,7 @@ exports.requestRegistrationOtp = async (req, res) => {
         message: 'Verification code requested. Check your SMS and enter the code to finish registration.'
       });
     } catch (smsError) {
-      console.error(
-        'Registration OTP delivery failed:',
-        smsError.message
-      );
+      console.error('Registration OTP delivery failed:', smsError.message);
 
       await pool.query(
         'DELETE FROM pending_patient_registration WHERE phone = ?',
@@ -370,7 +517,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
 
     if (!pendingRows.length) {
       await connection.rollback();
-
       return res.status(400).json({
         error: 'No pending registration was found. Please request a new code.'
       });
@@ -383,7 +529,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
         'DELETE FROM pending_patient_registration WHERE id = ?',
         [pending.id]
       );
-
       await connection.commit();
 
       return res.status(400).json({
@@ -391,12 +536,11 @@ exports.verifyRegistrationOtp = async (req, res) => {
       });
     }
 
-    if (pending.attempts >= REGISTRATION_OTP_MAX_ATTEMPTS) {
+    if (Number(pending.attempts) >= REGISTRATION_OTP_MAX_ATTEMPTS) {
       await connection.query(
         'DELETE FROM pending_patient_registration WHERE id = ?',
         [pending.id]
       );
-
       await connection.commit();
 
       return res.status(429).json({
@@ -407,7 +551,7 @@ exports.verifyRegistrationOtp = async (req, res) => {
     const matches = await bcrypt.compare(cleanCode, pending.code_hash);
 
     if (!matches) {
-      const attempts = pending.attempts + 1;
+      const attempts = Number(pending.attempts) + 1;
 
       if (attempts >= REGISTRATION_OTP_MAX_ATTEMPTS) {
         await connection.query(
@@ -440,7 +584,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
         'DELETE FROM pending_patient_registration WHERE id = ?',
         [pending.id]
       );
-
       await connection.commit();
 
       return res.status(409).json({
@@ -485,30 +628,22 @@ exports.verifyRegistrationOtp = async (req, res) => {
 };
 
 // ==========================================
+// PATIENT OTP LOGIN
+// ==========================================
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_MAX_REQUESTS = 3;
 const OTP_REQUEST_WINDOW_MIN = 10;
 
-
-// ==========================================
-// STEP 1: REQUEST OTP
-// POST /api/auth/otp/request
-// Body: { "phone": "0712345678" }
-// ==========================================
-
 exports.requestOtp = async (req, res) => {
   const { phone } = req.body || {};
 
   if (!phone || typeof phone !== 'string' || !phone.trim()) {
-    return res.status(400).json({
-      error: 'Phone number is required'
-    });
+    return res.status(400).json({ error: 'Phone number is required' });
   }
 
   const cleanPhone = phone.trim();
-
   const genericReply = {
     message: 'If this number is registered, a code has been sent.'
   };
@@ -518,11 +653,11 @@ exports.requestOtp = async (req, res) => {
       `SELECT COUNT(*) AS total
        FROM otp_code
        WHERE phone = ?
-       AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
+         AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
       [cleanPhone, OTP_REQUEST_WINDOW_MIN]
     );
 
-    if (recent[0].total >= OTP_MAX_REQUESTS) {
+    if (Number(recent[0].total) >= OTP_MAX_REQUESTS) {
       return res.status(429).json({
         error: 'Too many code requests. Please wait a few minutes and try again.'
       });
@@ -533,7 +668,7 @@ exports.requestOtp = async (req, res) => {
       [cleanPhone]
     );
 
-    if (patients.length === 0) {
+    if (!patients.length) {
       return res.status(200).json(genericReply);
     }
 
@@ -543,26 +678,25 @@ exports.requestOtp = async (req, res) => {
     );
 
     const code = String(crypto.randomInt(100000, 1000000));
-    const code_hash = await bcrypt.hash(code, 10);
+    const codeHash = await bcrypt.hash(code, 10);
 
     const [insertResult] = await pool.query(
       `INSERT INTO otp_code (phone, code_hash, expires_at)
        VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
-      [cleanPhone, code_hash, OTP_EXPIRY_MINUTES]
+      [cleanPhone, codeHash, OTP_EXPIRY_MINUTES]
     );
 
     try {
       await sendOtpSms(cleanPhone, code);
 
       console.log(
-        `OTP SMS submitted to provider for phone ending ${cleanPhone.slice(-4)}`
+        `Patient OTP SMS submitted for phone ending ${cleanPhone.slice(-4)}`
       );
 
       return res.status(200).json(genericReply);
     } catch (smsError) {
       console.error('OTP SMS sending failed:', smsError.message);
 
-      // Invalidate the code if SMS sending fails.
       await pool.query(
         'UPDATE otp_code SET used = 1 WHERE id = ?',
         [insertResult.insertId]
@@ -580,13 +714,6 @@ exports.requestOtp = async (req, res) => {
     });
   }
 };
-
-
-// ==========================================
-// STEP 2: VERIFY OTP AND LOG IN
-// POST /api/auth/otp/verify
-// Body: { "phone": "0712345678", "code": "123456" }
-// ==========================================
 
 exports.verifyOtp = async (req, res) => {
   const { phone, code } = req.body || {};
@@ -610,22 +737,20 @@ exports.verifyOtp = async (req, res) => {
       `SELECT *
        FROM otp_code
        WHERE phone = ?
-       AND used = 0
-       AND expires_at > NOW()
+         AND used = 0
+         AND expires_at > NOW()
        ORDER BY id DESC
        LIMIT 1`,
       [cleanPhone]
     );
 
-    if (rows.length === 0) {
-      return res.status(401).json({
-        error: 'Invalid or expired code'
-      });
+    if (!rows.length) {
+      return res.status(401).json({ error: 'Invalid or expired code' });
     }
 
     const otp = rows[0];
 
-    if (otp.attempts >= OTP_MAX_ATTEMPTS) {
+    if (Number(otp.attempts) >= OTP_MAX_ATTEMPTS) {
       await pool.query(
         'UPDATE otp_code SET used = 1 WHERE id = ?',
         [otp.id]
@@ -636,21 +761,14 @@ exports.verifyOtp = async (req, res) => {
       });
     }
 
-    const match = await bcrypt.compare(
-      cleanCode,
-      otp.code_hash
-    );
+    const matches = await bcrypt.compare(cleanCode, otp.code_hash);
 
-    if (!match) {
-      const newAttempts = otp.attempts + 1;
+    if (!matches) {
+      const attempts = Number(otp.attempts) + 1;
 
       await pool.query(
         'UPDATE otp_code SET attempts = ?, used = ? WHERE id = ?',
-        [
-          newAttempts,
-          newAttempts >= OTP_MAX_ATTEMPTS ? 1 : 0,
-          otp.id
-        ]
+        [attempts, attempts >= OTP_MAX_ATTEMPTS ? 1 : 0, otp.id]
       );
 
       return res.status(401).json({
@@ -668,10 +786,8 @@ exports.verifyOtp = async (req, res) => {
       [cleanPhone]
     );
 
-    if (patients.length === 0) {
-      return res.status(401).json({
-        error: 'Invalid or expired code'
-      });
+    if (!patients.length) {
+      return res.status(401).json({ error: 'Invalid or expired code' });
     }
 
     const user = patients[0];
@@ -683,9 +799,7 @@ exports.verifyOtp = async (req, res) => {
         hospital_id: null
       },
       process.env.JWT_SECRET,
-      {
-        expiresIn: '8h'
-      }
+      { expiresIn: '8h' }
     );
 
     return res.status(200).json({

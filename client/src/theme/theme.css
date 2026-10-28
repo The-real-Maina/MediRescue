@@ -1,0 +1,147 @@
+/* MediRescue theme tokens.
+   Light values match the original look exactly; dark values apply when
+   <html data-theme="dark">. Use these in CSS (color: var(--text)) and in
+   inline styles (style={{ background: "var(--surface)" }}). */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-alt: #f1f3f5;
+  --border: #e5e7eb;
+  --border-soft: #eeeeee;
+  --border-strong: #d1d5db;
+
+  /* Text */
+  --heading: #18212f;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  /* Brand (red) */
+  --primary: #d62828;          /* button backgrounds */
+  --primary-hover: #b91c1c;
+  --primary-text: #d62828;     /* red text, links, outlines */
+  --primary-faint: #fff1f1;    /* hover tint */
+  --primary-soft: #fee2e2;     /* icon chips */
+  --text-on-primary: #ffffff;
+  --btn-dark: #18212f;
+  --focus-ring: rgba(214, 40, 40, 0.1);
+
+  /* Status */
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+  --danger-border: #fecaca;
+  --success: #15803d;
+  --success-text: #166534;
+  --success-soft: #dcfce7;
+  --success-border: #bbf7d0;
+  --warning: #92400e;
+  --warning-soft: #fef3c7;
+  --info: #1d4ed8;
+  --info-soft: #dbeafe;
+  --indigo: #4338ca;
+  --indigo-soft: #e0e7ff;
+  --purple: #7e22ce;
+  --purple-soft: #f3e8ff;
+  --orange: #c2410c;
+  --orange-soft: #ffedd5;
+
+  /* Backgrounds with gradients */
+  --hero-gradient: linear-gradient(135deg, #ffffff 0%, #f8f9fa 55%, #ffe5e5 100%);
+  --auth-gradient: linear-gradient(135deg, #f8f9fa, #ffe5e5);
+
+  /* Inputs */
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --placeholder: #9ca3af;
+
+  /* Sidebar (dark in both themes) */
+  --sidebar-bg: #0f1b24;
+  --sidebar-text: #d5e0e6;
+  --sidebar-muted: #8aa0ad;
+  --sidebar-active: #1b3140;
+  --sidebar-border: #223644;
+
+  /* Depth */
+  --shadow-nav: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 5px 20px rgba(0, 0, 0, 0.07);
+  --shadow-soft: 0 4px 15px rgba(0, 0, 0, 0.06);
+  --shadow-modal: 0 10px 35px rgba(0, 0, 0, 0.12);
+  --overlay: rgba(10, 20, 28, 0.5);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0e1319;
+  --surface: #161d25;
+  --surface-alt: #1f2832;
+  --border: #2a3541;
+  --border-soft: #232d38;
+  --border-strong: #3a4857;
+
+  --heading: #f1f5f9;
+  --text: #e3e9ef;
+  --text-muted: #9aa7b4;
+  --text-faint: #6f7c89;
+
+  --primary: #d62828;
+  --primary-hover: #e03a3a;
+  --primary-text: #ff6b6b;
+  --primary-faint: #2a1417;
+  --primary-soft: #3d181b;
+  --text-on-primary: #ffffff;
+  --btn-dark: #2b3744;
+  --focus-ring: rgba(255, 107, 107, 0.25);
+
+  --danger: #ff8585;
+  --danger-soft: #3d181b;
+  --danger-border: #5a2327;
+  --success: #5fd68f;
+  --success-text: #7fe0a6;
+  --success-soft: #12321f;
+  --success-border: #1d5033;
+  --warning: #f5c451;
+  --warning-soft: #3b2f10;
+  --info: #7fb2ff;
+  --info-soft: #14284a;
+  --indigo: #a5a8ff;
+  --indigo-soft: #1f2250;
+  --purple: #d0a4ff;
+  --purple-soft: #2c1a45;
+  --orange: #ffa766;
+  --orange-soft: #3d2310;
+
+  --hero-gradient: linear-gradient(135deg, #10161c 0%, #131a21 55%, #2a1417 100%);
+  --auth-gradient: linear-gradient(135deg, #10161c, #2a1417);
+
+  --input-bg: #0f161d;
+  --input-border: #3a4857;
+  --placeholder: #6f7c89;
+
+  --sidebar-bg: #081117;
+  --sidebar-text: #d5e0e6;
+  --sidebar-muted: #7e95a2;
+  --sidebar-active: #15293a;
+  --sidebar-border: #1a2d3a;
+
+  --shadow-nav: 0 2px 10px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 5px 20px rgba(0, 0, 0, 0.4);
+  --shadow-soft: 0 4px 15px rgba(0, 0, 0, 0.35);
+  --shadow-modal: 0 10px 35px rgba(0, 0, 0, 0.6);
+  --overlay: rgba(0, 0, 0, 0.65);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary-text);
+  outline-offset: 2px;
+}

@@ -21,6 +21,7 @@ import StaffManagement from './pages/StaffManagement'
 import PatientManagement from './pages/PatientManagement'
 import PaymentManagement from './pages/PaymentManagement'
 import ProtectedRoute from './components/ProtectedRoute'
+import ThemeToggle from './components/ThemeToggle'
 import DashboardLayout from './layouts/DashboardLayout'
 
 // Sends a logged-in user to the Change Password page whenever their
@@ -48,10 +49,18 @@ function ForcePasswordChange() {
   return null
 }
 
+// The Home page has no toggle of its own, so show one there.
+// Login, Register and the dashboards already render their own.
+function HomeThemeToggle() {
+  const location = useLocation()
+  return location.pathname === '/' ? <ThemeToggle floating /> : null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <ForcePasswordChange />
+      <HomeThemeToggle />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
@@ -64,6 +73,7 @@ export default function App() {
           <Route path="/my-cases" element={<MyCases />} />
           <Route path="/health-profile" element={<HealthProfile />} />
           <Route path="/pay-now" element={<PayNow />} />
+          <Route path="/patient/change-password" element={<ChangePassword embedded />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRole="hospital_staff"><DashboardLayout /></ProtectedRoute>}>

@@ -1,22 +1,38 @@
+
 const express = require('express');
 const router = express.Router();
 
 const authController = require('../controllers/authController');
-const { changePassword } = require('../controllers/authPasswordController');
+const authPasswordController = require('../controllers/authPasswordController');
 const { authenticate } = require('../middleware/auth');
 
 // Patient registration — OTP verification required
 router.post('/register/request-otp', authController.requestRegistrationOtp);
 router.post('/register/verify-otp', authController.verifyRegistrationOtp);
 
-// Patient / staff login
+// Login — password verification
 router.post('/login', authController.login);
 
-// Existing patient OTP login
+// Second login step — hospital staff, hospital admins and drivers
+router.post('/staff-otp/verify', authController.verifyStaffLoginOtp);
+
+// Existing patient OTP login — unchanged
 router.post('/otp/request', authController.requestOtp);
 router.post('/otp/verify', authController.verifyOtp);
 
-// Change own password (staff, drivers, hospital admins)
-router.post('/change-password', authenticate, changePassword);
+// Patient forgot password — request recovery OTP
+router.post(
+  '/forgot-password/request-otp',
+  authPasswordController.requestPasswordResetOtp
+);
+
+// Patient forgot password — verify OTP and reset password
+router.post(
+  '/forgot-password/reset',
+  authPasswordController.resetPatientPassword
+);
+
+// Change own password — authenticated users
+router.post('/change-password', authenticate, authPasswordController.changePassword);
 
 module.exports = router;

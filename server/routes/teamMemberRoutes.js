@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 
@@ -6,6 +7,9 @@ const member = require('../controllers/teamMemberController');
 
 // Hospital staff and drivers only.
 router.use(authenticate, authorize('hospital_staff', 'driver'));
+
+// My hospital
+router.get('/hospital', member.getMyHospital);
 
 // My shifts
 router.get('/shifts', member.getMyShifts);

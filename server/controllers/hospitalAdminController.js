@@ -841,3 +841,43 @@ exports.reactivateAccount = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/hospital-admin/hospital
+ * Returns the hospital belonging to the logged-in admin.
+ */
+exports.getHospitalDetails = async (req, res) => {
+  const hospitalId = Number(req.user.hospital_id);
+
+  if (!Number.isSafeInteger(hospitalId) || hospitalId <= 0) {
+    return res.status(403).json({
+      error: 'Your account is not linked to a hospital'
+    });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, name, location
+       FROM hospital
+       WHERE id = ?
+       LIMIT 1`,
+      [hospitalId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Hospital not found'
+      });
+    }
+
+    return res.status(200).json({
+      hospital: rows[0]
+    });
+  } catch (err) {
+    console.error('Get hospital details error:', err);
+
+    return res.status(500).json({
+      error: 'Failed to retrieve hospital details'
+    });
+  }
+};

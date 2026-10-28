@@ -69,6 +69,7 @@ router.patch(
 // DRIVER ROUTES
 // ==========================================
 
+// Get emergencies assigned to the logged-in driver
 router.get(
   '/driver/assigned',
   authenticate,
@@ -76,6 +77,15 @@ router.get(
   caseController.getDriverAssignedCases
 );
 
+// Update the logged-in driver's assigned ambulance status
+router.patch(
+  '/driver/ambulance/status',
+  authenticate,
+  authorize('driver'),
+  caseController.updateDriverAmbulanceStatus
+);
+
+// Confirm patient pickup
 router.patch(
   '/:id/pickup',
   authenticate,
@@ -83,6 +93,7 @@ router.patch(
   caseController.confirmDriverPickup
 );
 
+// Confirm arrival at hospital
 router.patch(
   '/:id/arrive',
   authenticate,
