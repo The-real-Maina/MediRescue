@@ -1,5 +1,5 @@
-
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import PricingManager from '../components/PricingManager' 
 
 const API = 'http://localhost:5000/api/hospital-admin'
 const HR_API = `${API}/hr`
@@ -153,7 +153,8 @@ const NAV = [
   ['leave', 'Leave Requests'],
   ['absences', 'Absence Reports'],
   ['attendance', 'Attendance'],
-  ['announcements', 'Announcements']
+  ['announcements', 'Announcements'],
+  ['pricing', 'Pricing Management'] 
 ]
 
 export default function HospitalAdminDashboard() {
@@ -476,7 +477,6 @@ export default function HospitalAdminDashboard() {
 
       {loading && <p style={{ ...styles.sub, marginBottom: 15 }}>Loading information...</p>}
 
-      {/* OVERVIEW */}
       {section === 'overview' && (
         <>
           <div style={{ ...styles.card, background: '#f8fafc' }}>
@@ -513,7 +513,6 @@ export default function HospitalAdminDashboard() {
         </>
       )}
 
-      {/* TEAM AND SHIFTS */}
       {section === 'shifts' && (
         <>
           <div style={{ ...styles.card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
@@ -595,7 +594,6 @@ export default function HospitalAdminDashboard() {
         </>
       )}
 
-      {/* LEAVE REQUESTS */}
       {section === 'leave' && (
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Staff and Driver Leave Requests</h2>
@@ -649,7 +647,6 @@ export default function HospitalAdminDashboard() {
         </div>
       )}
 
-      {/* ABSENCE REPORTS */}
       {section === 'absences' && (
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Absence Reports</h2>
@@ -702,7 +699,6 @@ export default function HospitalAdminDashboard() {
         </div>
       )}
 
-      {/* ATTENDANCE */}
       {section === 'attendance' && (
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Attendance and Days Off</h2>
@@ -733,7 +729,6 @@ export default function HospitalAdminDashboard() {
         </div>
       )}
 
-      {/* ANNOUNCEMENTS */}
       {section === 'announcements' && (
         <>
           <div style={styles.card}>
@@ -777,6 +772,11 @@ export default function HospitalAdminDashboard() {
           </div>
         </>
       )}
+
+      {section === 'pricing' && (
+        <PricingManager />
+      )}
+
     </div>
   )
 }

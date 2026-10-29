@@ -1,642 +1,210 @@
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-import { useEffect, useMemo, useState } from 'react'
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  useMap
-} from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+// Fix for missing default Leaflet icons in React
+import iconUrl from 'leaflet/dist/images/marker-icon.png';
+import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
+import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
 
-const API = 'http://localhost:5000/api'
-const DEFAULT_CENTER = [-0.42, 36.95]
-const REFRESH_INTERVAL = 10000
-const FRESH_LOCATION_MS = 60000
-
-// ==========================================
-// TIME AND GPS STATUS HELPERS
-// ==========================================
-
-function parseGpsTime(value) {
-  if (!value) return null
-
-  const raw = String(value)
-  const normalized = raw.includes('T')
-    ? raw
-    : raw.replace(' ', 'T')
-
-  const timestamp = Date.parse(
-    /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
-      ? normalized
-      : `${normalized}Z`
-  )
-
-  return Number.isFinite(timestamp)
-    ? timestamp
-    : null
-}
-
-function getLocationStatus(ambulance, now) {
-  if (
-    ambulance.current_lat == null ||
-    ambulance.current_lng == null ||
-    !ambulance.location_updated_at
-  ) {
-    return 'No GPS data'
-  }
-
-  const timestamp = parseGpsTime(
-    ambulance.location_updated_at
-  )
-
-  if (timestamp === null) {
-    return 'Unknown update time'
-  }
-
-  const age = now - timestamp
-
-  return age >= 0 && age <= FRESH_LOCATION_MS
-    ? 'Recently updated'
-    : 'Outdated location'
-}
-
-function formatGpsTime(value) {
-  const timestamp = parseGpsTime(value)
-
-  if (timestamp === null) {
-    return 'Not available'
-  }
-
-  return new Date(timestamp).toLocaleString()
-}
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl,
+  iconUrl,
+  shadowUrl,
+});
 
 // ==========================================
-// CUSTOM AMBULANCE MAP MARKERS
+// PASTE YOUR TOMTOM API KEY HERE
 // ==========================================
+const TOMTOM_API_KEY = 'Wy82pBAQ8dVbXR4X7DDPw89jMsoQrv8t'; 
 
-function createAmbulanceIcon(isFresh) {
-  const background = isFresh
-    ? '#16a34a'
-    : '#f59e0b'
+// Custom Icons
+const patientIcon = new L.DivIcon({
+  html: '<div style="background-color:#dc2626; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; color:white; font-size:16px; border:3px solid white; box-shadow:0 2px 5px rgba(0,0,0,0.5);">👤</div>',
+  className: 'custom-icon',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
+});
 
-  const border = isFresh
-    ? '#15803d'
-    : '#d97706'
+const ambulanceIcon = new L.DivIcon({
+  html: '<div style="background-color:#2563eb; width:35px; height:35px; border-radius:8px; display:grid; place-items:center; color:white; font-size:18px; border:3px solid white; box-shadow:0 2px 5px rgba(0,0,0,0.5);">🚑</div>',
+  className: 'custom-icon',
+  iconSize: [35, 35],
+  iconAnchor: [17, 17]
+});
 
-  return L.divIcon({
-    className: 'medirescue-ambulance-marker',
-    html: `
-      <div style="
-        position:relative;
-        width:46px;
-        height:46px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        background:${background};
-        border:3px solid #ffffff;
-        border-radius:15px;
-        box-shadow:0 5px 16px rgba(0,0,0,0.25);
-        font-size:25px;
-      ">
-        🚑
-        <div style="
-          position:absolute;
-          bottom:-10px;
-          left:14px;
-          width:12px;
-          height:12px;
-          background:${background};
-          transform:rotate(45deg);
-          border-right:2px solid #ffffff;
-          border-bottom:2px solid #ffffff;
-        "></div>
-      </div>
-    `,
-    iconSize: [46, 46],
-    iconAnchor: [23, 53],
-    popupAnchor: [0, -48]
-  })
-}
-
-const freshIcon = createAmbulanceIcon(true)
-const outdatedIcon = createAmbulanceIcon(false)
-
-// ==========================================
-// FIT MAP TO AMBULANCE POSITIONS
-// ==========================================
-
-function FitAmbulances({ positions }) {
-  const map = useMap()
-
-  const positionKey = positions
-    .map(([lat, lng]) => `${lat},${lng}`)
-    .join('|')
-
+function MapBounds({ bounds }) {
+  const map = useMap();
   useEffect(() => {
-    if (positions.length === 0) return
-
-    if (positions.length === 1) {
-      map.setView(positions[0], 14)
-    } else {
-      map.fitBounds(positions, {
-        padding: [50, 50],
-        maxZoom: 15
-      })
+    if (bounds && bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [50, 50] });
     }
-    // Refit only when the reported positions change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, positionKey])
-
-  return null
+  }, [bounds, map]);
+  return null;
 }
 
-// ==========================================
-// MAIN GPS TRACKING COMPONENT
-// ==========================================
+export default function AmbulanceTrackingMap({ caseData }) {
+  const [route, setRoute] = useState([]);
+  const [eta, setEta] = useState(null);
+  const [distance, setDistance] = useState(null);
+  const [isTrafficAware, setIsTrafficAware] = useState(false);
 
-export default function AmbulanceTrackingMap() {
-  const [ambulances, setAmbulances] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [lastRefresh, setLastRefresh] = useState(null)
-  const [now, setNow] = useState(Date.now())
+  // Patient location
+  const patientPos = caseData?.pickup_lat && caseData?.pickup_lng 
+    ? [Number(caseData.pickup_lat), Number(caseData.pickup_lng)] 
+    : [-1.286389, 36.817223]; // Fallback to Nairobi
 
-  // ==========================================
-  // FETCH HOSPITAL AMBULANCE LOCATIONS
-  // ==========================================
+  // Ambulance location (if the backend doesn't send this yet, we mock it slightly offset for testing)
+  const ambulancePos = caseData?.ambulance_lat && caseData?.ambulance_lng
+    ? [Number(caseData.ambulance_lat), Number(caseData.ambulance_lng)]
+    : [patientPos[0] + 0.01, patientPos[1] + 0.01]; 
+
+  const hospitalPos = caseData?.hospital_lat && caseData?.hospital_lng
+    ? [Number(caseData.hospital_lat), Number(caseData.hospital_lng)]
+    : null;
 
   useEffect(() => {
-    let mounted = true
-    let controller = null
+    if (!ambulancePos || !patientPos) return;
 
-    async function loadLocations() {
-      if (controller) controller.abort()
-
-      const currentController = new AbortController()
-      controller = currentController
-
+    const fetchRoute = async () => {
       try {
-        const token = localStorage.getItem(
-          'medirescue_token'
-        )
+        // ==========================================
+        // 1. TRAFFIC-AWARE ROUTING (TomTom)
+        // ==========================================
+        if (TOMTOM_API_KEY && TOMTOM_API_KEY !== 'YOUR_TOMTOM_API_KEY_HERE') {
+          // TomTom uses [lat, lng] for routing requests
+          const url = `https://api.tomtom.com/routing/1/calculateRoute/${ambulancePos[0]},${ambulancePos[1]}:${patientPos[0]},${patientPos[1]}/json?key=${TOMTOM_API_KEY}&traffic=true&travelMode=car`;
+          
+          const res = await fetch(url);
+          const data = await res.json();
 
-        if (!token) {
-          throw new Error('Please log in again.')
-        }
-
-        const response = await fetch(
-          `${API}/ambulances/locations`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            signal: currentController.signal
+          if (data.routes && data.routes.length > 0) {
+            const routeData = data.routes[0];
+            
+            // TomTom returns time in seconds, distance in meters
+            setEta(Math.ceil(routeData.summary.travelTimeInSeconds / 60));
+            setDistance((routeData.summary.lengthInMeters / 1000).toFixed(1));
+            
+            // TomTom returns points as [{latitude, longitude}], we need [lat, lng]
+            const points = routeData.legs[0].points.map(p => [p.latitude, p.longitude]);
+            setRoute(points);
+            setIsTrafficAware(true);
+            return;
           }
-        )
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ||
-            'Failed to load ambulance locations'
-          )
         }
 
-        if (!Array.isArray(data)) {
-          throw new Error(
-            'Unexpected ambulance location response'
-          )
+        // ==========================================
+        // 2. FALLBACK ROUTING (OSRM - No Traffic Data)
+        // ==========================================
+        console.warn("Using OSRM fallback. Add a TomTom API key for traffic-aware routing.");
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${ambulancePos[1]},${ambulancePos[0]};${patientPos[1]},${patientPos[0]}?overview=full&geometries=geojson`;
+        const osrmRes = await fetch(osrmUrl);
+        const osrmData = await osrmRes.json();
+
+        if (osrmData.routes && osrmData.routes.length > 0) {
+          const routeData = osrmData.routes[0];
+          setEta(Math.ceil(routeData.duration / 60));
+          setDistance((routeData.distance / 1000).toFixed(1));
+          
+          const coords = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+          setRoute(coords);
+          setIsTrafficAware(false);
         }
-
-        if (!mounted) return
-
-        setAmbulances(data)
-        setLastRefresh(new Date())
-        setNow(Date.now())
-        setError('')
       } catch (err) {
-        if (
-          !mounted ||
-          err.name === 'AbortError'
-        ) {
-          return
-        }
-
-        setError(err.message)
-      } finally {
-        if (mounted) {
-          setLoading(false)
-        }
+        console.error("Failed to fetch route:", err);
       }
-    }
+    };
 
-    loadLocations()
+    fetchRoute();
+  }, [ambulancePos[0], ambulancePos[1], patientPos[0], patientPos[1]]);
 
-    const interval = setInterval(
-      loadLocations,
-      REFRESH_INTERVAL
-    )
+  const bounds = [ambulancePos, patientPos];
+  if (hospitalPos) bounds.push(hospitalPos);
 
-    return () => {
-      mounted = false
-      clearInterval(interval)
-
-      if (controller) {
-        controller.abort()
-      }
-    }
-  }, [])
-
-  // ==========================================
-  // VALID GPS COORDINATES
-  // ==========================================
-
-  const locatedAmbulances = ambulances.filter(
-    (ambulance) => {
-      if (
-        ambulance.current_lat == null ||
-        ambulance.current_lng == null
-      ) {
-        return false
-      }
-
-      const lat = Number(ambulance.current_lat)
-      const lng = Number(ambulance.current_lng)
-
-      return (
-        Number.isFinite(lat) &&
-        Number.isFinite(lng) &&
-        lat >= -90 &&
-        lat <= 90 &&
-        lng >= -180 &&
-        lng <= 180
-      )
-    }
-  )
-
-  const positions = useMemo(
-    () =>
-      locatedAmbulances.map((ambulance) => [
-        Number(ambulance.current_lat),
-        Number(ambulance.current_lng)
-      ]),
-    // Only rebuild positions when new API data arrives.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ambulances]
-  )
-
-  const freshCount = locatedAmbulances.filter(
-    (ambulance) =>
-      getLocationStatus(ambulance, now) ===
-      'Recently updated'
-  ).length
-
-  const outdatedCount =
-    locatedAmbulances.length - freshCount
-
-  const noGpsCount =
-    ambulances.length - locatedAmbulances.length
-
-  // ==========================================
-  // INTERFACE
-  // ==========================================
+  const hasTomTomKey = TOMTOM_API_KEY && TOMTOM_API_KEY !== 'YOUR_TOMTOM_API_KEY_HERE';
 
   return (
-    <section
-      style={{
-        background: '#ffffff',
-        padding: 26,
-        borderRadius: 15,
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 5px 20px rgba(15,23,42,0.04)',
-        marginBottom: 30,
-        color: '#17233b'
-      }}
-    >
-      {/* HEADER */}
-      <div style={{ marginBottom: 22 }}>
-        <p
-          style={{
-            color: '#dc2626',
-            fontSize: 12,
-            fontWeight: 800,
-            letterSpacing: 1.2,
-            margin: '0 0 8px'
-          }}
-        >
-          EMERGENCY RESPONSE MONITORING
-        </p>
-
-        <h2
-          style={{
-            margin: '0 0 9px',
-            color: '#10243a',
-            fontSize: 25
-          }}
-        >
-          🚑 Ambulance GPS Tracking
-        </h2>
-
-        <p
-          style={{
-            color: '#64748b',
-            lineHeight: 1.6,
-            margin: 0
-          }}
-        >
-          Monitor the latest reported locations
-          of ambulances assigned to your hospital.
-        </p>
-      </div>
-
-      {/* STATISTICS */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'repeat(auto-fit, minmax(145px, 1fr))',
-          gap: 12,
-          marginBottom: 22
-        }}
-      >
-        {[
-          {
-            label: 'Total Ambulances',
-            value: ambulances.length,
-            color: '#10243a',
-            bg: '#f1f5f9'
-          },
-          {
-            label: 'Recently Updated',
-            value: freshCount,
-            color: '#166534',
-            bg: '#dcfce7'
-          },
-          {
-            label: 'Outdated GPS',
-            value: outdatedCount,
-            color: '#92400e',
-            bg: '#fef3c7'
-          },
-          {
-            label: 'No GPS Data',
-            value: noGpsCount,
-            color: '#475569',
-            bg: '#f1f5f9'
-          }
-        ].map((item) => (
-          <div
-            key={item.label}
-            style={{
-              background: item.bg,
-              borderRadius: 11,
-              padding: '16px 18px'
-            }}
-          >
-            <div
-              style={{
-                color: item.color,
-                fontSize: 27,
-                fontWeight: 800
-              }}
-            >
-              {item.value}
-            </div>
-
-            <div
-              style={{
-                color: item.color,
-                fontSize: 12,
-                fontWeight: 700,
-                marginTop: 4
-              }}
-            >
-              {item.label}
-            </div>
+    <div style={{ position: 'relative', height: '400px', width: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', zIndex: 0 }}>
+      
+      {/* ETA OVERLAY BOX */}
+      {eta !== null && (
+        <div style={{
+          position: 'absolute',
+          top: '15px',
+          right: '15px',
+          zIndex: 1000,
+          background: 'white',
+          padding: '15px',
+          borderRadius: '10px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          borderLeft: isTrafficAware ? '5px solid #10b981' : '5px solid #2563eb',
+          minWidth: '150px'
+        }}>
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>
+            Ambulance ETA
           </div>
-        ))}
-      </div>
-
-      {/* LEGEND */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 20,
-          marginBottom: 16,
-          fontSize: 13,
-          color: '#475569'
-        }}
-      >
-        <span>🟢 Recently updated GPS</span>
-        <span>🟠 Outdated GPS location</span>
-        <span>⚪ No GPS coordinates</span>
-      </div>
-
-      {loading && (
-        <p style={{ color: '#64748b' }}>
-          Loading ambulance locations...
-        </p>
-      )}
-
-      {error && (
-        <div
-          role="alert"
-          style={{
-            color: '#b91c1c',
-            background: '#fef2f2',
-            padding: 13,
-            borderRadius: 9,
-            marginBottom: 16
-          }}
-        >
-          {error}
+          <div style={{ fontSize: '28px', color: '#10243a', fontWeight: '900', margin: '4px 0' }}>
+            {eta} min
+          </div>
+          <div style={{ fontSize: '13px', color: '#64748b' }}>
+            {distance} km away
+          </div>
+          {isTrafficAware && (
+            <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 'bold', marginTop: '6px' }}>
+              ✓ Traffic Avoided
+            </div>
+          )}
         </div>
       )}
 
-      {/* MAP */}
-      <div
-        style={{
-          height: 440,
-          width: '100%',
-          borderRadius: 12,
-          overflow: 'hidden',
-          border: '1px solid #cbd5e1'
-        }}
+      <MapContainer 
+        center={ambulancePos} 
+        zoom={13} 
+        style={{ height: '100%', width: '100%' }}
+        scrollWheelZoom={false}
       >
-        <MapContainer
-          center={DEFAULT_CENTER}
-          zoom={11}
-          style={{
-            height: '100%',
-            width: '100%'
-          }}
-          scrollWheelZoom={false}
-        >
+        {/* BASE MAP */}
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {/* LIVE TRAFFIC OVERLAY (Only loads if TomTom key exists) */}
+        {hasTomTomKey && (
           <TileLayer
-            attribution='&copy; OpenStreetMap contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url={`https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${TOMTOM_API_KEY}`}
+            opacity={0.6} // Transparent so you can still see street names
           />
-
-          <FitAmbulances positions={positions} />
-
-          {locatedAmbulances.map((ambulance) => {
-            const lat = Number(
-              ambulance.current_lat
-            )
-
-            const lng = Number(
-              ambulance.current_lng
-            )
-
-            const locationStatus =
-              getLocationStatus(ambulance, now)
-
-            const isFresh =
-              locationStatus === 'Recently updated'
-
-            return (
-              <Marker
-                key={ambulance.id}
-                position={[lat, lng]}
-                icon={
-                  isFresh
-                    ? freshIcon
-                    : outdatedIcon
-                }
-              >
-                <Popup minWidth={240} maxWidth={310}>
-                  <div
-                    style={{
-                      fontFamily:
-                        'Arial, sans-serif',
-                      color: '#17233b',
-                      minWidth: 215
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 18,
-                        fontWeight: 800,
-                        color: '#10243a',
-                        marginBottom: 10
-                      }}
-                    >
-                      🚑 {ambulance.plate_number}
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'inline-block',
-                        background: isFresh
-                          ? '#dcfce7'
-                          : '#fef3c7',
-                        color: isFresh
-                          ? '#166534'
-                          : '#92400e',
-                        padding: '6px 10px',
-                        borderRadius: 15,
-                        fontWeight: 700,
-                        fontSize: 12,
-                        marginBottom: 12
-                      }}
-                    >
-                      ● {locationStatus}
-                    </div>
-
-                    <p style={{ margin: '8px 0' }}>
-                      <strong>Driver:</strong>{' '}
-                      {ambulance.driver_name ||
-                        'Not assigned'}
-                    </p>
-
-                    <p style={{ margin: '8px 0' }}>
-                      <strong>Ambulance status:</strong>{' '}
-                      {ambulance.status}
-                    </p>
-
-                    <p style={{ margin: '8px 0' }}>
-                      <strong>Last GPS update:</strong>{' '}
-                      {formatGpsTime(
-                        ambulance.location_updated_at
-                      )}
-                    </p>
-
-                    <p
-                      style={{
-                        margin: '8px 0',
-                        fontSize: 12,
-                        color: '#64748b'
-                      }}
-                    >
-                      {lat.toFixed(6)}, {lng.toFixed(6)}
-                    </p>
-
-                    <a
-                      href={`https://www.google.com/maps?q=${lat},${lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'inline-block',
-                        background: '#10243a',
-                        color: '#ffffff',
-                        padding: '10px 13px',
-                        borderRadius: 7,
-                        fontWeight: 700,
-                        textDecoration: 'none',
-                        marginTop: 8
-                      }}
-                    >
-                      📍 Open in Google Maps ↗
-                    </a>
-                  </div>
-                </Popup>
-              </Marker>
-            )
-          })}
-        </MapContainer>
-      </div>
-
-      {/* MAP FOOTER */}
-      <p
-        style={{
-          fontSize: 13,
-          color: '#64748b',
-          marginTop: 15,
-          lineHeight: 1.6
-        }}
-      >
-        GPS data refreshes every 10 seconds.
-        Green markers indicate a location reported
-        within the last 60 seconds. Orange markers
-        indicate older positions, which may not
-        represent an ambulance's current location.
-      </p>
-
-      {lastRefresh && (
-        <p
-          style={{
-            fontSize: 12,
-            color: '#64748b'
-          }}
-        >
-          Last checked:{' '}
-          {lastRefresh.toLocaleTimeString()}
-        </p>
-      )}
-
-      {!loading &&
-        ambulances.length > 0 &&
-        locatedAmbulances.length === 0 && (
-          <p style={{ color: '#92400e' }}>
-            No ambulances have reported valid GPS
-            coordinates yet.
-          </p>
         )}
-    </section>
-  )
+        
+        <MapBounds bounds={bounds} />
+
+        <Marker position={ambulancePos} icon={ambulanceIcon}>
+          <Popup>Ambulance Current Location</Popup>
+        </Marker>
+
+        <Marker position={patientPos} icon={patientIcon}>
+          <Popup>Patient Pickup Location</Popup>
+        </Marker>
+
+        {hospitalPos && (
+          <Marker position={hospitalPos}>
+            <Popup>Hospital</Popup>
+          </Marker>
+        )}
+
+        {/* ROUTE LINE */}
+        {route.length > 0 && (
+          <Polyline 
+            positions={route} 
+            color={isTrafficAware ? "#10b981" : "#2563eb"} // Green if traffic-aware, Blue if standard
+            weight={5} 
+            opacity={0.8} 
+          />
+        )}
+      </MapContainer>
+    </div>
+  );
 }

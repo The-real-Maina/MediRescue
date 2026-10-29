@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import PriceApprovals from '../components/PriceApprovals' // IMPORTED HERE
 
 const API_URL = 'http://localhost:5000/api/admin'
 
@@ -12,6 +13,7 @@ function formatMoney(amount) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('overview') // NEW: For switching tabs
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -118,6 +120,11 @@ export default function AdminDashboard() {
         .mr-admin-loading{padding:28px;background:#fff;border:1px solid #e0e8f0;border-radius:12px;color:#637a96}
         .mr-admin-footer{text-align:center;font-size:12px;color:#8191a5;margin-top:42px}
         @media(max-width:450px){.mr-admin-stats{grid-template-columns:1fr}.mr-admin-account{width:100%;justify-content:space-between}.mr-admin-stat{min-height:110px}.mr-admin-title{font-size:29px}}
+        
+        /* NEW TABS CSS */
+        .mr-admin-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #e0e8f0; padding-bottom: 15px; }
+        .mr-admin-tab { padding: 10px 20px; background: transparent; color: #637a96; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px;}
+        .mr-admin-tab.active { background: #e5232b; color: white; }
       `}</style>
 
       <header className="mr-admin-top">
@@ -140,27 +147,52 @@ export default function AdminDashboard() {
         <h1 className="mr-admin-title">Super Admin Dashboard</h1>
         <p className="mr-admin-desc">Oversee hospitals, emergency operations, ambulance availability, payments and system activity from one place.</p>
 
-        <div className="mr-admin-section-head">
-          <h2 className="mr-admin-section-title">System Overview</h2>
-          <button className="mr-admin-refresh" type="button" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>↻ Refresh Statistics</button>
+        {/* NEW TABS */}
+        <div className="mr-admin-tabs">
+          <button 
+            className={`mr-admin-tab ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            System Overview
+          </button>
+          <button 
+            className={`mr-admin-tab ${activeTab === 'pricing' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pricing')}
+          >
+            Pricing Approvals
+          </button>
         </div>
 
-        {loading && <div className="mr-admin-loading" role="status">Loading dashboard statistics...</div>}
-        {error && <div className="mr-admin-alert" role="alert">{error}</div>}
+        {activeTab === 'overview' && (
+          <>
+            <div className="mr-admin-section-head">
+              <h2 className="mr-admin-section-title">System Overview</h2>
+              <button className="mr-admin-refresh" type="button" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>↻ Refresh Statistics</button>
+            </div>
 
-        {!loading && !error && stats && (
-          <div className="mr-admin-stats">
-            {statCards.map((card) => (
-              <article className={`mr-admin-stat${card.wide ? ' wide' : ''}`} key={card.label}>
-                <div>
-                  <p className="mr-admin-stat-label">{card.label}</p>
-                  <p className="mr-admin-stat-value">{card.value ?? 0}</p>
-                </div>
-                <span className={`mr-admin-stat-icon ${card.tone}`} aria-hidden="true">{card.icon}</span>
-              </article>
-            ))}
-          </div>
+            {loading && <div className="mr-admin-loading" role="status">Loading dashboard statistics...</div>}
+            {error && <div className="mr-admin-alert" role="alert">{error}</div>}
+
+            {!loading && !error && stats && (
+              <div className="mr-admin-stats">
+                {statCards.map((card) => (
+                  <article className={`mr-admin-stat${card.wide ? ' wide' : ''}`} key={card.label}>
+                    <div>
+                      <p className="mr-admin-stat-label">{card.label}</p>
+                      <p className="mr-admin-stat-value">{card.value ?? 0}</p>
+                    </div>
+                    <span className={`mr-admin-stat-icon ${card.tone}`} aria-hidden="true">{card.icon}</span>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
         )}
+
+        {activeTab === 'pricing' && (
+          <PriceApprovals />
+        )}
+
         <footer className="mr-admin-footer">MediRescue • Emergency Response Management System</footer>
       </main>
     </div>

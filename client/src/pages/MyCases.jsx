@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CaseChat from '../components/CaseChat'
+import PaymentReceipt from '../components/PaymentReceipt'
 
 // ==========================================
 // MEDIRESCUE — MY EMERGENCY CASES
@@ -257,57 +258,21 @@ const styles = {
 // ==========================================
 
 const statusStyles = {
-  requested: {
-    background: '#fef3c7',
-    color: '#92400e'
-  },
-  assigned: {
-    background: '#dbeafe',
-    color: '#1d4ed8'
-  },
-  dispatched: {
-    background: '#dbeafe',
-    color: '#1d4ed8'
-  },
-  picked_up: {
-    background: '#e0e7ff',
-    color: '#4338ca'
-  },
-  in_treatment: {
-    background: '#f3e8ff',
-    color: '#7e22ce'
-  },
-  payment_pending: {
-    background: '#ffedd5',
-    color: '#c2410c'
-  },
-  paid: {
-    background: '#dcfce7',
-    color: '#15803d'
-  },
-  closed: {
-    background: '#e2e8f0',
-    color: '#475569'
-  }
+  requested: { background: '#fef3c7', color: '#92400e' },
+  assigned: { background: '#dbeafe', color: '#1d4ed8' },
+  dispatched: { background: '#dbeafe', color: '#1d4ed8' },
+  picked_up: { background: '#e0e7ff', color: '#4338ca' },
+  in_treatment: { background: '#f3e8ff', color: '#7e22ce' },
+  payment_pending: { background: '#ffedd5', color: '#c2410c' },
+  paid: { background: '#dcfce7', color: '#15803d' },
+  closed: { background: '#e2e8f0', color: '#475569' }
 }
 
 const severityStyles = {
-  low: {
-    background: '#dcfce7',
-    color: '#166534'
-  },
-  moderate: {
-    background: '#fef3c7',
-    color: '#92400e'
-  },
-  high: {
-    background: '#ffedd5',
-    color: '#c2410c'
-  },
-  critical: {
-    background: '#fee2e2',
-    color: '#b91c1c'
-  }
+  low: { background: '#dcfce7', color: '#166534' },
+  moderate: { background: '#fef3c7', color: '#92400e' },
+  high: { background: '#ffedd5', color: '#c2410c' },
+  critical: { background: '#fee2e2', color: '#b91c1c' }
 }
 
 const badgeBase = {
@@ -330,10 +295,15 @@ function MyCases() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  
+  // Safely get user for the receipt
+  let user = {}
+  try {
+    user = JSON.parse(localStorage.getItem('medirescue_user') || '{}') || {}
+  } catch {
+    user = {}
+  }
 
-  // The first load shows a loading state and any error.
-  // Later refreshes run quietly in the background so a
-  // newly dispatched ambulance appears without reloading.
   const fetchCases = useCallback(async (isFirstLoad) => {
     const token = localStorage.getItem('medirescue_token')
 
@@ -343,14 +313,9 @@ function MyCases() {
     }
 
     try {
-      const response = await fetch(
-        'http://localhost:5000/api/cases',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      )
+      const response = await fetch('http://localhost:5000/api/cases', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
 
       const data = await response.json()
 
@@ -360,149 +325,75 @@ function MyCases() {
       }
 
       if (!response.ok) {
-        throw new Error(
-          data.error || 'Failed to load emergency cases'
-        )
+        throw new Error(data.error || 'Failed to load emergency cases')
       }
 
-      setCases(
-        Array.isArray(data)
-          ? data
-          : Array.isArray(data.cases)
-            ? data.cases
-            : []
-      )
-
+      setCases(Array.isArray(data) ? data : Array.isArray(data.cases) ? data.cases : [])
       setError('')
 
     } catch (err) {
-      if (isFirstLoad) {
-        setError(
-          err.message || 'Unable to load emergency cases.'
-        )
-      }
+      if (isFirstLoad) setError(err.message || 'Unable to load emergency cases.')
     } finally {
-      if (isFirstLoad) {
-        setLoading(false)
-      }
+      if (isFirstLoad) setLoading(false)
     }
   }, [navigate])
 
   useEffect(() => {
     fetchCases(true)
-
-    const interval = setInterval(() => {
-      fetchCases(false)
-    }, REFRESH_INTERVAL)
-
+    const interval = setInterval(() => { fetchCases(false) }, REFRESH_INTERVAL)
     return () => clearInterval(interval)
   }, [fetchCases])
 
   const formatStatus = (status) => {
     if (!status) return 'Unknown'
-
-    return String(status)
-      .replaceAll('_', ' ')
-      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    return String(status).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
   }
 
   const getStatusStyle = (status) => ({
     ...badgeBase,
-    ...(statusStyles[status] || {
-      background: '#e2e8f0',
-      color: '#334155'
-    })
+    ...(statusStyles[status] || { background: '#e2e8f0', color: '#334155' })
   })
 
   const getSeverityStyle = (severity) => ({
     ...badgeBase,
-    ...(severityStyles[severity] || {
-      background: '#f1f5f9',
-      color: '#475569'
-    })
+    ...(severityStyles[severity] || { background: '#f1f5f9', color: '#475569' })
   })
 
   return (
     <div style={styles.page}>
-
-      {/* HEADER */}
       <header style={styles.header}>
         <div>
-          <h2 style={styles.brand}>
-            ✚ MediRescue
-          </h2>
-
-          <div style={styles.portal}>
-            PATIENT PORTAL • CASE TRACKING
-          </div>
+          <h2 style={styles.brand}>✚ MediRescue</h2>
+          <div style={styles.portal}>PATIENT PORTAL • CASE TRACKING</div>
         </div>
-
-        <button
-          type="button"
-          style={styles.headerButton}
-          onClick={() => navigate('/patient-dashboard')}
-        >
+        <button type="button" style={styles.headerButton} onClick={() => navigate('/patient-dashboard')}>
           ← Dashboard
         </button>
       </header>
 
       <main style={styles.container}>
-
-        {/* BACK BUTTON */}
-        <button
-          type="button"
-          style={styles.backButton}
-          onClick={() => navigate('/patient-dashboard')}
-        >
+        <button type="button" style={styles.backButton} onClick={() => navigate('/patient-dashboard')}>
           ← Back to Patient Dashboard
         </button>
 
-        {/* PAGE INTRODUCTION */}
         <section>
-          <p style={styles.eyebrow}>
-            MEDIRESCUE CASE MANAGEMENT
-          </p>
-
-          <h1 style={styles.title}>
-            My Emergency Cases
-          </h1>
-
-          <p style={styles.subtitle}>
-            Track your submitted emergency requests,
-            monitor their response status, and
-            review important case details.
-          </p>
+          <p style={styles.eyebrow}>MEDIRESCUE CASE MANAGEMENT</p>
+          <h1 style={styles.title}>My Emergency Cases</h1>
+          <p style={styles.subtitle}>Track your submitted emergency requests, monitor their response status, and review important case details.</p>
         </section>
 
-        {/* CASE SUMMARY */}
         <section style={styles.summary}>
           <div>
-            <span style={styles.summaryLabel}>
-              TOTAL EMERGENCY REQUESTS
-            </span>
-
-            <div style={styles.summaryNumber}>
-              {loading ? '—' : error ? '—' : cases.length}
-            </div>
+            <span style={styles.summaryLabel}>TOTAL EMERGENCY REQUESTS</span>
+            <div style={styles.summaryNumber}>{loading ? '—' : error ? '—' : cases.length}</div>
           </div>
-
-          <button
-            type="button"
-            style={styles.redButton}
-            onClick={() => navigate('/emergency-request')}
-          >
+          <button type="button" style={styles.redButton} onClick={() => navigate('/emergency-request')}>
             + New Emergency Request
           </button>
         </section>
 
-        {/* LOADING */}
-        {loading && (
-          <div style={styles.message} role="status">
-            ⏳ Loading your emergency cases...
-          </div>
-        )}
+        {loading && <div style={styles.message} role="status">⏳ Loading your emergency cases...</div>}
 
-        {/* ERROR */}
         {!loading && error && (
           <div style={styles.error} role="alert">
             <strong>Unable to load cases</strong>
@@ -510,150 +401,74 @@ function MyCases() {
           </div>
         )}
 
-        {/* EMPTY STATE */}
         {!loading && !error && cases.length === 0 && (
           <div style={styles.message}>
-            <div style={styles.emptyIcon}>
-              ☷
-            </div>
-
-            <h3
-              style={{
-                color: '#10243a',
-                fontSize: 22,
-                margin: '0 0 12px'
-              }}
-            >
-              No Emergency Cases Yet
-            </h3>
-
-            <p
-              style={{
-                margin: '0 0 22px',
-                color: '#64748b'
-              }}
-            >
-              You have not submitted any emergency
-              requests yet. Your requests will appear
-              here once they have been created.
-            </p>
-
-            <button
-              type="button"
-              style={styles.redButton}
-              onClick={() => navigate('/emergency-request')}
-            >
+            <div style={styles.emptyIcon}>☷</div>
+            <h3 style={{ color: '#10243a', fontSize: 22, margin: '0 0 12px' }}>No Emergency Cases Yet</h3>
+            <p style={{ margin: '0 0 22px', color: '#64748b' }}>You have not submitted any emergency requests yet. Your requests will appear here once they have been created.</p>
+            <button type="button" style={styles.redButton} onClick={() => navigate('/emergency-request')}>
               Request Emergency Help →
             </button>
           </div>
         )}
 
-        {/* CASE LIST */}
         {!loading && !error && cases.length > 0 && (
           <section style={styles.list}>
-
             {cases.map((caseItem, index) => {
-              const caseId =
-                caseItem.id ?? caseItem.case_id ?? index + 1
-
-              const hospitalName =
-                caseItem.hospital_name ||
-                (caseItem.hospital_id
-                  ? `Hospital ${caseItem.hospital_id}`
-                  : 'Not yet assigned')
+              const caseId = caseItem.id ?? caseItem.case_id ?? index + 1
+              const hospitalName = caseItem.hospital_name || (caseItem.hospital_id ? `Hospital ${caseItem.hospital_id}` : 'Not yet assigned')
 
               return (
-                <article
-                  key={caseId}
-                  style={styles.card}
-                >
-
-                  {/* CASE HEADER */}
+                <article key={caseId} style={styles.card}>
                   <div style={styles.cardHeader}>
                     <div>
-                      <span style={styles.caseNumber}>
-                        CASE #{caseId}
-                      </span>
-
-                      <h3 style={styles.cardTitle}>
-                        {caseItem.emergency_type ||
-                          'Emergency Request'}
-                      </h3>
+                      <span style={styles.caseNumber}>CASE #{caseId}</span>
+                      <h3 style={styles.cardTitle}>{caseItem.emergency_type || 'Emergency Request'}</h3>
                     </div>
-
-                    <span
-                      style={getStatusStyle(caseItem.status)}
-                    >
-                      {formatStatus(caseItem.status)}
-                    </span>
+                    <span style={getStatusStyle(caseItem.status)}>{formatStatus(caseItem.status)}</span>
                   </div>
 
-                  {/* DESCRIPTION */}
-                  <p style={styles.description}>
-                    {caseItem.emergency_desc ||
-                      'No emergency description provided.'}
-                  </p>
-
+                  <p style={styles.description}>{caseItem.emergency_desc || 'No emergency description provided.'}</p>
                   <hr style={styles.divider} />
 
-                  {/* CASE DETAILS */}
                   <div style={styles.details}>
-
                     <div>
-                      <span style={styles.detailLabel}>
-                        Severity
-                      </span>
-
-                      <span
-                        style={getSeverityStyle(
-                          caseItem.severity
-                        )}
-                      >
-                        {caseItem.severity
-                          ? formatStatus(caseItem.severity)
-                          : 'Not specified'}
-                      </span>
+                      <span style={styles.detailLabel}>Severity</span>
+                      <span style={getSeverityStyle(caseItem.severity)}>{caseItem.severity ? formatStatus(caseItem.severity) : 'Not specified'}</span>
                     </div>
-
                     <div>
-                      <span style={styles.detailLabel}>
-                        Assigned Hospital
-                      </span>
-
-                      <strong style={styles.detailValue}>
-                        {hospitalName}
-                      </strong>
+                      <span style={styles.detailLabel}>Assigned Hospital</span>
+                      <strong style={styles.detailValue}>{hospitalName}</strong>
                     </div>
-
                     <div>
-                      <span style={styles.detailLabel}>
-                        Current Status
-                      </span>
-
-                      <strong style={styles.detailValue}>
-                        {formatStatus(caseItem.status)}
-                      </strong>
+                      <span style={styles.detailLabel}>Current Status</span>
+                      <strong style={styles.detailValue}>{formatStatus(caseItem.status)}</strong>
                     </div>
-
                   </div>
 
-                  {/* CHAT WITH THE DRIVER WHILE THE AMBULANCE IS ON ITS WAY */}
-                  {caseItem.status === 'dispatched' && (
-                    <CaseChat caseId={caseId} />
+                  {caseItem.status === 'dispatched' && <CaseChat caseId={caseId} />}
+
+                  {['paid', 'closed'].includes(caseItem.status) && (
+                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                      <h4 style={{ color: '#10243a', margin: '0 0 10px' }}>Payment Successful</h4>
+                      <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '15px' }}>
+                        Your payment for this emergency case has been confirmed. You can download your official receipt below.
+                      </p>
+                      <PaymentReceipt 
+                        caseData={caseItem} 
+                        patientName={user?.name || user?.full_name || 'Patient'} 
+                      />
+                    </div>
                   )}
                 </article>
               )
             })}
-
           </section>
         )}
 
-        {/* FOOTER */}
         <footer style={styles.footer}>
-          © {new Date().getFullYear()} MediRescue
-          {' '}• Emergency Medical Response System
+          © {new Date().getFullYear()} MediRescue {' '}• Emergency Medical Response System
         </footer>
-
       </main>
     </div>
   )

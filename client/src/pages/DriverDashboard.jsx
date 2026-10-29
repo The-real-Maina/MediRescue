@@ -1,9 +1,11 @@
-
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CaseChat from '../components/CaseChat'
 import PatientHealthSummary from '../components/PatientHealthSummary'
 import StaffHRPanel from '../components/StaffHRPanel'
+import FlipTimer from '../components/FlipTimer'
+import useCountdown from '../hooks/useCountdown'
+import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap' // IMPORTED HERE
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const AMBULANCE_API = `${API}/ambulances`
@@ -39,6 +41,7 @@ const heading = {
 }
 
 const activeStatuses = [
+  'assigned',
   'dispatched',
   'picked_up',
   'arrived_at_hospital'
@@ -85,11 +88,30 @@ function formatStatus(value) {
     .replace(/\b\w/g, char => char.toUpperCase())
 }
 
+function DriverTimer({ deadline }) {
+  const secs = useCountdown(deadline);
+  if (!deadline || secs <= 0) return null;
+  return (
+    <div style={{ marginTop: 15, marginBottom: 15 }}>
+      <p style={{ margin: '0 0 8px', fontWeight: 'bold', color: '#b45309' }}>
+        ⚠ Time remaining to accept:
+      </p>
+      <FlipTimer seconds={secs} />
+    </div>
+  );
+}
+
 function EmergencyCard({ emergency, onAction, busy }) {
   const status = emergency.status
 
   const nextAction =
-    status === 'dispatched'
+    status === 'assigned'
+      ? {
+          label: 'Accept Emergency',
+          endpoint: 'accept',
+          color: '#eab308'
+        }
+      : status === 'dispatched'
       ? {
           label: 'Confirm Patient Pickup',
           endpoint: 'pickup',
@@ -211,6 +233,20 @@ function EmergencyCard({ emergency, onAction, busy }) {
         </div>
       )}
 
+      {/* MAP ADDED HERE FOR THE DRIVER */}
+      {['assigned', 'dispatched'].includes(emergency.status) && (
+        <div style={{ marginTop: 24, marginBottom: 24 }}>
+          <h3 style={heading}>🗺️ Live Route to Patient</h3>
+          <AmbulanceTrackingMap 
+            caseData={{
+              ...emergency,
+              ambulance_lat: emergency.ambulance_lat,
+              ambulance_lng: emergency.ambulance_lng
+            }} 
+          />
+        </div>
+      )}
+
       <div style={{
         marginTop: 25,
         padding: 20,
@@ -220,6 +256,7 @@ function EmergencyCard({ emergency, onAction, busy }) {
         <h3 style={heading}>Emergency Response Progress</h3>
 
         {[
+          ['assigned', 'Awaiting Driver Acceptance'],
           ['dispatched', 'Ambulance Dispatched'],
           ['picked_up', 'Patient Picked Up'],
           ['arrived_at_hospital', 'Arrived at Hospital'],
@@ -285,6 +322,22 @@ function EmergencyCard({ emergency, onAction, busy }) {
         })}
       </div>
 
+      {status === 'assigned' && (
+        <div style={{
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          padding: 15,
+          borderRadius: 9,
+          marginTop: 20
+        }}>
+          <strong style={{ color: '#92400e' }}>Action Required</strong>
+          <p style={{ color: '#92400e', margin: '6px 0' }}>
+            You have been assigned this emergency. Please accept or decline immediately.
+          </p>
+          <DriverTimer deadline={emergency.accept_deadline} />
+        </div>
+      )}
+
       {status === 'dispatched' && (
         <p style={{
           background: '#fff7ed',
@@ -345,7 +398,7 @@ function EmergencyCard({ emergency, onAction, busy }) {
             opacity: busy ? 0.6 : 1
           }}
         >
-          {busy ? 'Updating...' : `${nextAction.label} →`}
+          {busy ? 'Processing...' : `${nextAction.label} →`}
         </button>
       )}
     </section>
@@ -499,9 +552,11 @@ export default function DriverDashboard({ view = 'dashboard' }) {
 
   async function handleEmergencyAction(caseId, action) {
     const confirmation =
-      action === 'pickup'
-        ? 'Confirm that you have picked up the patient?'
-        : 'Confirm that you have arrived at the hospital?'
+      action === 'accept'
+        ? 'Accept this emergency dispatch?'
+        : action === 'pickup'
+          ? 'Confirm that you have picked up the patient?'
+          : 'Confirm that you have arrived at the hospital?'
 
     if (!window.confirm(confirmation)) return
 
@@ -516,9 +571,11 @@ export default function DriverDashboard({ view = 'dashboard' }) {
       )
 
       setMessage(
-        action === 'pickup'
-          ? `Patient pickup confirmed for Case #${caseId}.`
-          : `Hospital arrival confirmed for Case #${caseId}.`
+        action === 'accept'
+          ? `Case #${caseId} accepted. Proceed to the patient.`
+          : action === 'pickup'
+            ? `Patient pickup confirmed for Case #${caseId}.`
+            : `Hospital arrival confirmed for Case #${caseId}.`
       )
 
       await loadEmergencies(false)
@@ -939,7 +996,6 @@ export default function DriverDashboard({ view = 'dashboard' }) {
           </div>
         )}
 
-        {/* Driver HR: shifts, leave, absences and announcements */}
         {!loading && ambulance && view === 'dashboard' && (
           <section style={{ marginTop: 28 }}>
             <StaffHRPanel />

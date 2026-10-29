@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap'
 import PatientHealthSummary from '../components/PatientHealthSummary'
 import StaffHRPanel from '../components/StaffHRPanel'
+import FlipTimer from '../components/FlipTimer'
+import useCountdown from '../hooks/useCountdown'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -37,6 +39,7 @@ const trackingStatuses = [
 
 const statusColors = {
   requested: ['#fff1f2', '#be123c'],
+  assigned: ['#eff6ff', '#1d4ed8'],
   dispatched: ['#fff7ed', '#c2410c'],
   picked_up: ['#eef2ff', '#4338ca'],
   arrived_at_hospital: ['#e0f2fe', '#0369a1'],
@@ -435,6 +438,11 @@ function TrackingCard({ item }) {
           </div>
         </div>
 
+        {/* LIVE MAP INTEGRATION */}
+        <div style={{ marginTop: 24, marginBottom: 24 }}>
+          <AmbulanceTrackingMap caseData={item} />
+        </div>
+
         <TrackingTimeline currentStatus={item.status} />
 
         {item.status === 'dispatched' && (
@@ -478,6 +486,12 @@ function TrackingCard({ item }) {
       </div>
     </article>
   )
+}
+
+// Helper component to safely wrap the hook inside the map loop
+function DashboardTimer({ deadline }) {
+  const secs = useCountdown(deadline);
+  return <FlipTimer seconds={secs} />;
 }
 
 export default function StaffDashboard({ view = 'dashboard' }) {
@@ -665,7 +679,7 @@ export default function StaffDashboard({ view = 'dashboard' }) {
     setDispatchingCase(caseId)
 
     try {
-      const data = await request(`/cases/${caseId}/ambulance`, {
+      const data = await request(`/cases/${caseId}/assign`, {
         method: 'PATCH',
         body: JSON.stringify({
           ambulance_id: Number(ambulanceId)
@@ -1137,8 +1151,6 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                 <> Last checked: {lastRefresh.toLocaleTimeString()}.</>
               )}
             </p>
-
-            <AmbulanceTrackingMap />
           </section>
         )}
 
@@ -1311,13 +1323,13 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                           <PatientHealthSummary caseId={caseItem.id} />
                         )}
 
-                        {caseItem.status === 'requested' && (
+                        {['requested', 'assigned'].includes(caseItem.status) && (
                           <section style={styles.actionPanel}>
                             <h4 style={{
                               color: COLORS.navy,
                               margin: '0 0 10px'
                             }}>
-                              Dispatch Ambulance
+                              {caseItem.status === 'assigned' ? 'Reassign Ambulance' : 'Dispatch Ambulance'}
                             </h4>
 
                             <p style={styles.sectionDescription}>
@@ -1348,16 +1360,12 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                               </div>
                             )}
 
-                            {suggestion &&
-                              !suggestion.has_pickup_location && (
-                                <p style={{
-                                  ...styles.sectionDescription,
-                                  color: '#92400e'
-                                }}>
-                                  This request has no patient location,
-                                  so ambulances cannot be ranked by distance.
-                                </p>
-                              )}
+                            {/* THE 3D FLIP TIMER USING THE WRAPPER COMPONENT */}
+                            {caseItem.status === 'assigned' && caseItem.accept_deadline && (
+                               <div style={{ marginTop: 20 }}>
+                                  <DashboardTimer deadline={caseItem.accept_deadline} />
+                               </div>
+                            )}
 
                             {ambulanceOptions.length > 0 ? (
                               <div style={{
@@ -1405,24 +1413,14 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                                 >
                                   {dispatchingCase === caseItem.id
                                     ? 'Dispatching...'
-                                    : 'Dispatch Ambulance →'}
+                                    : caseItem.status === 'assigned' 
+                                      ? 'Reassign Ambulance →'
+                                      : 'Dispatch Ambulance →'}
                                 </button>
                               </div>
                             ) : (
                               <p style={styles.sectionDescription}>
                                 No ambulances currently available.
-                              </p>
-                            )}
-
-                            {closestAmbulance && (
-                              <p style={{
-                                ...styles.sectionDescription,
-                                fontSize: 12
-                              }}>
-                                Distances are straight-line, from each
-                                ambulance's last known position to the
-                                patient's reported location. You can
-                                still choose a different ambulance.
                               </p>
                             )}
                           </section>

@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 
@@ -51,8 +50,9 @@ router.patch(
   caseController.updateCaseStatus
 );
 
+// Updated path to /assign to match the StaffAssignmentRow component
 router.patch(
-  '/:id/ambulance',
+  '/:id/assign',
   authenticate,
   authorize('hospital_staff'),
   caseController.assignAmbulance
@@ -83,6 +83,14 @@ router.patch(
   authenticate,
   authorize('driver'),
   caseController.updateDriverAmbulanceStatus
+);
+
+// NEW: Driver accepts the assigned case
+router.patch(
+  '/:id/accept',
+  authenticate,
+  authorize('driver'),
+  caseController.acceptCase
 );
 
 // Confirm patient pickup

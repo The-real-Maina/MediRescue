@@ -1,136 +1,40 @@
-
 require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
 const pool = require('./config/db');
-const { authenticate, authorize } = require('./middleware/auth');
 
 const app = express();
-
-// ==========================================
-// MIDDLEWARE
-// ==========================================
 
 app.use(cors());
 app.use(express.json());
 
 // ==========================================
-// HEALTH CHECK
+// ROUTES
 // ==========================================
+
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/cases', require('./routes/caseRoutes'));
+app.use('/api/messages', require('./routes/messageRoutes'));
+app.use('/api/tracking', require('./routes/trackingRoutes'));
+app.use('/api/health-profile', require('./routes/healthProfileRoutes'));
+app.use('/api/ambulances', require('./routes/ambulanceRoutes'));
+app.use('/api/mpesa', require('./routes/mpesaRoutes'));
+app.use('/api/team-member', require('./routes/teamMemberRoutes'));
+
+// Super Admin Routes
+app.use('/api/admin', require('./routes/adminAccountRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
+
+// Hospital Admin Routes
+app.use('/api/hospital-admin', require('./routes/hospitalAdminRoutes'));
+app.use('/api/hospital-admin/hr', require('./routes/hospitalAdminHrRoutes'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// ==========================================
-// API ROUTES
-// ==========================================
-
-// Authentication
-app.use('/api/auth', require('./routes/authRoutes'));
-
-// Emergency cases
-app.use('/api/cases', require('./routes/caseRoutes'));
-
-// Patient and driver chat on a dispatched case
-app.use('/api/messages', require('./routes/messageRoutes'));
-
-// Patient health profile
-app.use('/api/health-profile', require('./routes/healthProfileRoutes'));
-
-// Ambulance management
-app.use('/api/ambulances', require('./routes/ambulanceRoutes'));
-
-// Hospital Pricing Management
-app.use(
-  '/api/hospital-pricing',
-  require('./routes/hospitalPricingRoutes')
-);
-
-// ==========================================
-// SUPER ADMIN ROUTES
-// ==========================================
-
-// Hospital admin accounts and password resets
-app.use('/api/admin', require('./routes/adminAccountRoutes'));
-
-// General Super Admin functionality
-app.use('/api/admin', require('./routes/adminRoutes'));
-
-// ==========================================
-// HOSPITAL ADMIN ROUTES
-// ==========================================
-
-// Hospital team overview and shift assignment
-app.use(
-  '/api/hospital-admin',
-  require('./routes/hospitalAdminRoutes')
-);
-
-// Hospital Admin HR: leave, absences, attendance and announcements
-app.use(
-  '/api/hospital-admin/hr',
-  require('./routes/hospitalAdminHrRoutes')
-);
-
-// ==========================================
-// TEAM MEMBER ROUTES
-// ==========================================
-
-// Staff and driver HR self-service
-app.use(
-  '/api/team-member',
-  require('./routes/teamMemberRoutes')
-);
-
-// ==========================================
-// M-PESA
-// ==========================================
-
-app.use('/api/mpesa', require('./routes/mpesaRoutes'));
-
-// ==========================================
-// DATABASE TEST
-// ==========================================
-
-app.get('/api/db-test', async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT * FROM hospital'
-    );
-
-    res.json(rows);
-  } catch (err) {
-    console.error('Database test failed:', err.message);
-
-    res.status(500).json({
-      error: 'Database connection or query failed'
-    });
-  }
-});
-
-// ==========================================
-// STAFF AUTHORIZATION TEST
-// ==========================================
-
-app.get(
-  '/api/staff-only',
-  authenticate,
-  authorize('hospital_staff'),
-  (req, res) => {
-    res.json({
-      message: `Hello ${req.user.role}, you're authorized.`
-    });
-  }
-);
-
-// ==========================================
-// START SERVER
-// ==========================================
-
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
   console.log(`MediRescue server running on port ${PORT}`);
 });
