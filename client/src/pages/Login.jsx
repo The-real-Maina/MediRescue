@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import ThemeToggle from '../components/ThemeToggle'
 
-// FIXED: Now uses the Vercel environment variable, falling back to localhost if missing
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
-const API_URL = `${API_BASE}/auth`
+// Using School Wi-Fi IP since hotspot has no data
+const API_URL = 'http://172.16.45.18:5000/api/auth'
 
 const roles = [
   { value: 'patient', label: 'Patient', icon: '♡', description: 'Medical assistance' },
@@ -126,12 +125,7 @@ function Login() {
   const location = useLocation()
 
   const [role, setRole] = useState('patient')
-  const [formData, setFormData] = useState({
-    phone: '',
-    email: '',
-    password: ''
-  })
-
+  const [formData, setFormData] = useState({ phone: '', email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -373,12 +367,7 @@ function Login() {
         <aside style={styles.branding}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-              <div style={{
-                width: 48, height: 48, borderRadius: 13,
-                background: '#dc2626', display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-                fontSize: 29, fontWeight: 800
-              }}>
+              <div style={{ width: 48, height: 48, borderRadius: 13, background: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 29, fontWeight: 800 }}>
                 ✚
               </div>
               <div>
@@ -408,12 +397,7 @@ function Login() {
           <div style={{ borderTop: '1px solid #36516a', paddingTop: 22 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {['Patient Services', 'Hospital Coordination', 'Ambulance GPS'].map(item => (
-                <span key={item} style={{
-                  padding: '8px 11px', borderRadius: 20,
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#e2e8f0', fontSize: 11
-                }}>
+                <span key={item} style={{ padding: '8px 11px', borderRadius: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0', fontSize: 11 }}>
                   ✓ {item}
                 </span>
               ))}
@@ -441,19 +425,8 @@ function Login() {
                 {roles.map(item => {
                   const selected = role === item.value
                   return (
-                    <button key={item.value} type="button" aria-pressed={selected} onClick={() => handleRoleChange(item.value)} style={{
-                      ...styles.roleButton,
-                      background: selected ? 'var(--primary-faint)' : 'var(--surface-alt)',
-                      border: selected ? '1.5px solid var(--primary)' : '1px solid var(--border)',
-                      boxShadow: selected ? '0 0 0 2px var(--focus-ring)' : 'none'
-                    }}>
-                      <span aria-hidden="true" style={{
-                        width: 32, height: 32, flexShrink: 0, borderRadius: 9,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: selected ? 'var(--primary-soft)' : 'var(--border)',
-                        color: selected ? 'var(--primary-text)' : 'var(--text-muted)',
-                        fontSize: 19, fontWeight: 800
-                      }}>
+                    <button key={item.value} type="button" aria-pressed={selected} onClick={() => handleRoleChange(item.value)} style={{ ...styles.roleButton, background: selected ? 'var(--primary-faint)' : 'var(--surface-alt)', border: selected ? '1.5px solid var(--primary)' : '1px solid var(--border)', boxShadow: selected ? '0 0 0 2px var(--focus-ring)' : 'none' }}>
+                      <span aria-hidden="true" style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: selected ? 'var(--primary-soft)' : 'var(--border)', color: selected ? 'var(--primary-text)' : 'var(--text-muted)', fontSize: 19, fontWeight: 800 }}>
                         {item.icon}
                       </span>
                       <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
