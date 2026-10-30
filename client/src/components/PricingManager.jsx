@@ -16,7 +16,7 @@ export default function PricingManager() {
       return;
     }
 
-    const url = 'http://localhost:5000/api/hospital-admin/pricing/current';
+    const url = 'http://192.168.137.1:5000/api/hospital-admin/pricing/current';
     console.log("Fetching prices with token:", token.substring(0, 10) + "..."); 
 
     fetch(url, {
@@ -49,7 +49,7 @@ export default function PricingManager() {
     setError(''); setMessage('');
 
     try {
-      const res = await fetch('http://localhost:5000/api/hospital-admin/pricing/request', {
+      const res = await fetch('http://192.168.137.1:5000/api/hospital-admin/pricing/request', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 

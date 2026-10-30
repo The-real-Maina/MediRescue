@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 // while the chat is open.
 // ==========================================
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const API = import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000/api'
 const POLL_INTERVAL = 4000
 const MAX_LENGTH = 500
 

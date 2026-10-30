@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = 'http://localhost:5000/api/admin'
+const API_BASE = 'http://192.168.137.1:5000/api/admin'
 const blankStaff = {
   name: '',
   email: '',

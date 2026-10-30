@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const API = import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000/api'
 
 const s = {
   panel: { marginTop: 22, border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#fff' },

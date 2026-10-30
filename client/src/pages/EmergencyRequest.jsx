@@ -323,7 +323,7 @@ function EmergencyRequest() {
         return
       }
 
-      const response = await fetch('http://localhost:5000/api/cases/nearest-hospital', {
+      const response = await fetch('http://192.168.137.1:5000/api/cases/nearest-hospital', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -438,7 +438,7 @@ function EmergencyRequest() {
     setLoading(true)
 
     try {
-      const response = await fetch('http://localhost:5000/api/cases', {
+      const response = await fetch('http://192.168.137.1:5000/api/cases', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -508,7 +508,7 @@ function EmergencyRequest() {
           const token = localStorage.getItem('medirescue_token')
           if (!token) { navigate('/login'); return; }
 
-          const res = await fetch('http://localhost:5000/api/cases', {
+          const res = await fetch('http://192.168.137.1:5000/api/cases', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({

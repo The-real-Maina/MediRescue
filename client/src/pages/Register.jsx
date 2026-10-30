@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import ThemeToggle from '../components/ThemeToggle'
 
-const API_URL = 'http://localhost:5000/api/auth'
+const API_URL = 'http://192.168.137.1:5000/api/auth'
 
 const initialForm = {
   name: '',

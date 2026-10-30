@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PricingManager from '../components/PricingManager' 
 
-const API = 'http://localhost:5000/api/hospital-admin'
+const API = 'http://192.168.137.1:5000/api/hospital-admin'
 const HR_API = `${API}/hr`
 
 const styles = {

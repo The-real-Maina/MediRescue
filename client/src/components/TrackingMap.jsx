@@ -9,7 +9,7 @@ import {
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const API = import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000/api'
 const POLL_MS = 5000
 const STALE_SECONDS = 30
 

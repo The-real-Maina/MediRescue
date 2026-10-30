@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const API = 'http://localhost:5000/api/hospital-admin'
+const API = 'http://192.168.137.1:5000/api/hospital-admin'
 
 const blankForm = {
   account_type: 'hospital_staff',

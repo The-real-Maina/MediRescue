@@ -39,7 +39,7 @@ export default function PatientDashboard() {
             return
           }
 
-          const res = await fetch('http://localhost:5000/api/cases', {
+          const res = await fetch('http://192.168.137.1:5000/api/cases', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

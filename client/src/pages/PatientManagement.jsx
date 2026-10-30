@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = 'http://localhost:5000/api/admin/patients'
+const API_URL = 'http://192.168.137.1:5000/api/admin/patients'
 
 const css = `
 .pm-page{min-height:100vh;background:#f0f4fa;color:#102a43;font-family:'Segoe UI',Arial,sans-serif}

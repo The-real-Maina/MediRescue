@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = 'http://localhost:5000/api/admin/hospitals'
+const API_URL = 'http://192.168.137.1:5000/api/admin/hospitals'
 const emptyForm = { name: '', location: '', latitude: '', longitude: '' }
 
 export default function HospitalManagement() {

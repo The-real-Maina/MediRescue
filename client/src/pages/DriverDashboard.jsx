@@ -8,7 +8,7 @@ import useCountdown from '../hooks/useCountdown'
 import AmbulanceTrackingMap from '../components/AmbulanceTrackingMap'
 import InstallPWA from '../components/InstallPWA' // ADDED
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const API = import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000/api'
 const AMBULANCE_API = `${API}/ambulances`
 
 const palette = {

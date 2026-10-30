@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api') + '/health-profile'
+const API_URL = (import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000/api') + '/health-profile'
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 const genders = ['Female', 'Male', 'Other', 'Prefer not to say']
 const insurers = ['SHA', 'Private insurance', 'Employer scheme', 'None']

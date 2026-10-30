@@ -313,7 +313,7 @@ function MyCases() {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/cases', {
+      const response = await fetch('http://192.168.137.1:5000/api/cases', {
         headers: { Authorization: `Bearer ${token}` }
       })
 

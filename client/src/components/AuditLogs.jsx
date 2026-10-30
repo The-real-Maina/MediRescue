@@ -7,7 +7,7 @@ export default function AuditLogs() {
 
   useEffect(() => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://localhost:5000/api/admin/audit-logs', {
+    fetch('http://192.168.137.1:5000/api/admin/audit-logs', {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(async (res) => {

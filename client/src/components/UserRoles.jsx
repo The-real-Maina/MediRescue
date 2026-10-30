@@ -9,7 +9,7 @@ export default function UserRoles() {
 
   const fetchUsers = () => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://localhost:5000/api/admin/staff', {
+    fetch('http://192.168.137.1:5000/api/admin/staff', {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -35,7 +35,7 @@ export default function UserRoles() {
 
     const token = localStorage.getItem('medirescue_token');
     try {
-      const res = await fetch(`http://localhost:5000/api/admin/users/${userId}/role`, {
+      const res = await fetch(`http://192.168.137.1:5000/api/admin/users/${userId}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ role: newRole })

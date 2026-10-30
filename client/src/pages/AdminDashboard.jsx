@@ -6,7 +6,7 @@ import AuditLogs from '../components/AuditLogs'
 import Settlements from '../components/Settlements'
 import UserRoles from '../components/UserRoles' // ADDED
 
-const API_URL = 'http://localhost:5000/api/admin'
+const API_URL = 'http://192.168.137.1:5000/api/admin'
 
 function formatMoney(amount) {
   return `KSh ${Number(amount || 0).toLocaleString('en-KE', {

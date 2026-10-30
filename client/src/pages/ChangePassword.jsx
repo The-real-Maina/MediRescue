@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { FaLock, FaEye, FaEyeSlash, FaCheckCircle, FaRegCircle, FaSignOutAlt } from 'react-icons/fa'
 import Sidebar from '../components/Sidebar'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000'
 
 const DASHBOARDS = {
   patient: '/patient-dashboard',

@@ -23,7 +23,7 @@ export default function SystemAnalytics() {
 
   useEffect(() => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://localhost:5000/api/admin/analytics', {
+    fetch('http://192.168.137.1:5000/api/admin/analytics', {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(async (res) => {
