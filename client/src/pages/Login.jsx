@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import ThemeToggle from '../components/ThemeToggle'
 
-// Using School Wi-Fi IP since hotspot has no data
+// FIXED IP for School Wi-Fi
 const API_URL = 'http://172.16.45.18:5000/api/auth'
 
 const roles = [
@@ -16,108 +16,16 @@ const roles = [
 const OTP_ROLES = ['hospital_staff', 'hospital_admin', 'driver']
 
 const styles = {
-  page: {
-    minHeight: '100vh',
-    background: 'var(--bg)',
-    fontFamily: "'Segoe UI', Arial, sans-serif",
-    color: 'var(--heading)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '28px 16px',
-    boxSizing: 'border-box'
-  },
-  shell: {
-    width: '100%',
-    maxWidth: 1100,
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 390px), 1fr))',
-    background: 'var(--surface)',
-    borderRadius: 20,
-    overflow: 'hidden',
-    boxShadow: 'var(--shadow-modal)',
-    border: '1px solid var(--border)'
-  },
-  branding: {
-    background: 'linear-gradient(145deg, #10243a 0%, #173b58 100%)',
-    color: '#ffffff',
-    padding: 'clamp(28px, 5vw, 55px)',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    gap: 45,
-    minHeight: 440,
-    boxSizing: 'border-box'
-  },
-  formPanel: {
-    padding: 'clamp(24px, 5vw, 48px)',
-    background: 'var(--surface)'
-  },
-  label: {
-    display: 'block',
-    color: 'var(--text)',
-    fontSize: 13,
-    fontWeight: 700,
-    marginBottom: 9
-  },
-  input: {
-    display: 'block',
-    width: '100%',
-    boxSizing: 'border-box',
-    background: 'var(--input-bg)',
-    color: 'var(--text)',
-    border: '1px solid var(--input-border)',
-    borderRadius: 10,
-    padding: '14px 15px',
-    fontSize: 15,
-    outlineColor: 'var(--primary-text)',
-    minHeight: 49
-  },
-  roleButton: {
-    display: 'flex',
-    alignItems: 'center',
-    textAlign: 'left',
-    gap: 11,
-    width: '100%',
-    minWidth: 0,
-    padding: '13px 12px',
-    background: 'var(--surface-alt)',
-    border: '1px solid var(--border)',
-    borderRadius: 11,
-    color: 'var(--text)',
-    cursor: 'pointer',
-    fontFamily: 'inherit'
-  },
-  submit: {
-    width: '100%',
-    padding: '15px 18px',
-    border: 'none',
-    borderRadius: 10,
-    background: 'var(--primary)',
-    color: 'var(--text-on-primary)',
-    fontSize: 15,
-    fontWeight: 800,
-    cursor: 'pointer',
-    marginTop: 8
-  },
-  secondaryButton: {
-    width: '100%',
-    padding: '13px 18px',
-    border: '1px solid var(--border)',
-    borderRadius: 10,
-    background: 'var(--surface-alt)',
-    color: 'var(--text)',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-    marginTop: 10
-  },
-  textLink: {
-    color: 'var(--primary-text)',
-    fontWeight: 800,
-    textDecoration: 'none',
-    cursor: 'pointer'
-  }
+  page: { minHeight: '100vh', background: 'var(--bg)', fontFamily: "'Segoe UI', Arial, sans-serif", color: 'var(--heading)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 16px', boxSizing: 'border-box' },
+  shell: { width: '100%', maxWidth: 1100, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 390px), 1fr))', background: 'var(--surface)', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-modal)', border: '1px solid var(--border)' },
+  branding: { background: 'linear-gradient(145deg, #10243a 0%, #173b58 100%)', color: '#ffffff', padding: 'clamp(28px, 5vw, 55px)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 45, minHeight: 440, boxSizing: 'border-box' },
+  formPanel: { padding: 'clamp(24px, 5vw, 48px)', background: 'var(--surface)' },
+  label: { display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 700, marginBottom: 9 },
+  input: { display: 'block', width: '100%', boxSizing: 'border-box', background: 'var(--input-bg)', color: 'var(--text)', border: '1px solid var(--input-border)', borderRadius: 10, padding: '14px 15px', fontSize: 15, outlineColor: 'var(--primary-text)', minHeight: 49 },
+  roleButton: { display: 'flex', alignItems: 'center', textAlign: 'left', gap: 11, width: '100%', minWidth: 0, padding: '13px 12px', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 11, color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit' },
+  submit: { width: '100%', padding: '15px 18px', border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--text-on-primary)', fontSize: 15, fontWeight: 800, cursor: 'pointer', marginTop: 8 },
+  secondaryButton: { width: '100%', padding: '13px 18px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-alt)', color: 'var(--text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 10 },
+  textLink: { color: 'var(--primary-text)', fontWeight: 800, textDecoration: 'none', cursor: 'pointer' }
 }
 
 function Login() {
