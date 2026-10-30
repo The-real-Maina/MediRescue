@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import InstallPWA from '../components/InstallPWA' // ADDED
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
@@ -57,7 +58,6 @@ export default function PatientDashboard() {
 
           if (res.ok) {
             setSosSuccess(`🚨 SOS Sent! An ambulance is being dispatched. Case ID: ${data.case_id}`)
-            // Redirect to track the case after 3 seconds
             setTimeout(() => navigate('/my-cases'), 3000)
           } else {
             setSosError(data.error || 'Failed to send SOS dispatch.')
@@ -87,6 +87,10 @@ export default function PatientDashboard() {
 
   return (
     <main style={{ minHeight: '100%', background: 'var(--bg)', padding: 'clamp(24px, 4vw, 48px)', fontFamily: "'Segoe UI', Arial, sans-serif", color: 'var(--text)' }}>
+      
+      {/* ADDED PWA INSTALL BUTTON */}
+      <InstallPWA />
+
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
         
         <div style={{ marginBottom: 28 }}>
@@ -95,7 +99,6 @@ export default function PatientDashboard() {
           <p style={{ color: 'var(--text-muted)', fontSize: 16, lineHeight: 1.7, margin: 0 }}>Your space for staying informed about your emergency medical care.</p>
         </div>
 
-        {/* ONE-TAP SOS BUTTON */}
         <section style={{ background: '#dc2626', color: 'white', borderRadius: 16, padding: '30px 24px', textAlign: 'center', marginBottom: 24, boxShadow: '0 10px 25px rgba(220, 38, 38, 0.3)' }}>
           <h2 style={{ margin: '0 0 10px', fontSize: 26, fontWeight: 900 }}>🚨 NEED IMMEDIATE HELP? 🚨</h2>
           <p style={{ margin: '0 0 24px', fontSize: 16, opacity: 0.9, maxWidth: 600, marginLeft: 'auto', marginRight: 'auto' }}>

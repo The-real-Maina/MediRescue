@@ -18,7 +18,6 @@ exports.proposePriceChange = async (req, res) => {
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
-    // 1. Get current price
     const [currentPrices] = await connection.query(`
       SELECT amount FROM hospital_service_prices 
       WHERE hospital_id = ? AND service_name = ? AND severity = ?
@@ -31,7 +30,6 @@ exports.proposePriceChange = async (req, res) => {
 
     const oldPrice = currentPrices[0].amount;
 
-    // 2. Check for duplicates
     const [pending] = await connection.query(`
       SELECT id FROM price_change_requests 
       WHERE hospital_id = ? AND service_name = ? AND severity = ? AND status = 'pending'
@@ -42,7 +40,6 @@ exports.proposePriceChange = async (req, res) => {
       return res.status(409).json({ error: 'A pending request already exists for this service.' });
     }
 
-    // 3. Insert request
     await connection.query(`
       INSERT INTO price_change_requests 
       (hospital_id, service_name, severity, old_price, proposed_price, requested_by)
@@ -135,6 +132,20 @@ exports.reviewPriceChange = async (req, res) => {
     }
 
     await connection.commit();
+
+    // ADD AUDIT LOG
+    const actionText = action === 'approve' ? 'APPROVED' : 'DECLINED';
+    await pool.query(`
+      INSERT INTO audit_logs (actor_id, actor_name, actor_role, action_type, description)
+      VALUES (?, ?, ?, ?, ?)
+    `, [
+      superAdminId, 
+      req.user.name || 'Super Admin', 
+      'super_admin', 
+      'PRICE_CHANGE', 
+      `Super Admin ${actionText} price change for ${request.service_name} (${request.severity}) from KSh ${request.old_price} to KSh ${request.proposed_price}.`
+    ]);
+
     return res.status(200).json({ message: `Request ${action}d successfully.` });
   } catch (err) {
     if (connection) await connection.rollback();

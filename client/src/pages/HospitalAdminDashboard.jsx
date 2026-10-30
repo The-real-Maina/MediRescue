@@ -171,6 +171,9 @@ export default function HospitalAdminDashboard() {
   const [absences, setAbsences] = useState([])
   const [attendance, setAttendance] = useState([])
   const [announcements, setAnnouncements] = useState([])
+  
+  // NEW: State for Shift Coverage Warnings
+  const [coverageWarnings, setCoverageWarnings] = useState([])
 
   const [leaveFilter, setLeaveFilter] = useState('pending')
   const [absenceFilter, setAbsenceFilter] = useState('reported')
@@ -210,6 +213,8 @@ export default function HospitalAdminDashboard() {
     ])
     setTeam(getRows(teamData, 'team'))
     setShifts(getRows(shiftData, 'shifts'))
+    // NEW: Capture warnings from backend
+    setCoverageWarnings(shiftData.warnings || [])
   }, [date, start])
 
   const loadLeave = useCallback(async () => {
@@ -515,6 +520,27 @@ export default function HospitalAdminDashboard() {
 
       {section === 'shifts' && (
         <>
+          {/* SHIFT COVERAGE WARNING BANNER */}
+          {coverageWarnings.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '5px solid #dc2626', borderRadius: '10px', padding: '20px', marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ margin: '0 0 10px', color: '#92400e', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚠️ Shift Coverage Warning
+              </h3>
+              <p style={{ margin: '0 0 15px', color: '#92400e', fontSize: '14px' }}>
+                Your hospital is currently understaffed for the upcoming week. Please review and assign more shifts below.
+              </p>
+              <ul style={{ margin: 0, paddingLeft: '20px', color: '#92400e', fontSize: '13px', lineHeight: '1.6' }}>
+                {coverageWarnings.slice(0, 5).map((warn, index) => (
+                  <li key={index} style={{ marginBottom: '5px' }}>
+                    <strong>{dayLabel(warn.date)}</strong> ({warn.type === 'day' ? 'Day Shift' : 'Night Shift'}): 
+                    You have {warn.count} {warn.role}{warn.count !== 1 ? 's' : ''} assigned, but need at least {warn.min}.
+                  </li>
+                ))}
+                {coverageWarnings.length > 5 && <li>...and {coverageWarnings.length - 5} more warnings.</li>}
+              </ul>
+            </div>
+          )}
+
           <div style={{ ...styles.card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
             <button type="button" style={styles.button} onClick={() => setDate(addDays(date, -1))}>← Previous day</button>
             <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} style={styles.input} />

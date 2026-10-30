@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import PriceApprovals from '../components/PriceApprovals' // IMPORTED HERE
+import PriceApprovals from '../components/PriceApprovals'
+import SystemAnalytics from '../components/SystemAnalytics'
+import AuditLogs from '../components/AuditLogs'
+import Settlements from '../components/Settlements'
+import UserRoles from '../components/UserRoles' // ADDED
 
 const API_URL = 'http://localhost:5000/api/admin'
 
@@ -13,7 +17,7 @@ function formatMoney(amount) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('overview') // NEW: For switching tabs
+  const [activeTab, setActiveTab] = useState('overview') 
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -121,9 +125,9 @@ export default function AdminDashboard() {
         .mr-admin-footer{text-align:center;font-size:12px;color:#8191a5;margin-top:42px}
         @media(max-width:450px){.mr-admin-stats{grid-template-columns:1fr}.mr-admin-account{width:100%;justify-content:space-between}.mr-admin-stat{min-height:110px}.mr-admin-title{font-size:29px}}
         
-        /* NEW TABS CSS */
-        .mr-admin-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #e0e8f0; padding-bottom: 15px; }
-        .mr-admin-tab { padding: 10px 20px; background: transparent; color: #637a96; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px;}
+        /* TABS CSS */
+        .mr-admin-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #e0e8f0; padding-bottom: 15px; overflow-x: auto; }
+        .mr-admin-tab { padding: 10px 20px; background: transparent; color: #637a96; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; white-space: nowrap;}
         .mr-admin-tab.active { background: #e5232b; color: white; }
       `}</style>
 
@@ -147,7 +151,7 @@ export default function AdminDashboard() {
         <h1 className="mr-admin-title">Super Admin Dashboard</h1>
         <p className="mr-admin-desc">Oversee hospitals, emergency operations, ambulance availability, payments and system activity from one place.</p>
 
-        {/* NEW TABS */}
+        {/* TABS */}
         <div className="mr-admin-tabs">
           <button 
             className={`mr-admin-tab ${activeTab === 'overview' ? 'active' : ''}`}
@@ -160,6 +164,31 @@ export default function AdminDashboard() {
             onClick={() => setActiveTab('pricing')}
           >
             Pricing Approvals
+          </button>
+          <button 
+            className={`mr-admin-tab ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            System Analytics
+          </button>
+          <button 
+            className={`mr-admin-tab ${activeTab === 'logs' ? 'active' : ''}`}
+            onClick={() => setActiveTab('logs')}
+          >
+            Audit Log
+          </button>
+          <button 
+            className={`mr-admin-tab ${activeTab === 'settlements' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settlements')}
+          >
+            Settlements
+          </button>
+          {/* ADDED USER ROLES TAB */}
+          <button 
+            className={`mr-admin-tab ${activeTab === 'roles' ? 'active' : ''}`}
+            onClick={() => setActiveTab('roles')}
+          >
+            User Roles
           </button>
         </div>
 
@@ -191,6 +220,23 @@ export default function AdminDashboard() {
 
         {activeTab === 'pricing' && (
           <PriceApprovals />
+        )}
+
+        {activeTab === 'analytics' && (
+          <SystemAnalytics />
+        )}
+
+        {activeTab === 'logs' && (
+          <AuditLogs />
+        )}
+
+        {activeTab === 'settlements' && (
+          <Settlements />
+        )}
+
+        {/* ADDED USER ROLES RENDER */}
+        {activeTab === 'roles' && (
+          <UserRoles />
         )}
 
         <footer className="mr-admin-footer">MediRescue • Emergency Response Management System</footer>

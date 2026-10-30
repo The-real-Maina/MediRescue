@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 const pool = require('../config/db');
-const pricingController = require('../controllers/pricingController'); // ADDED
+const pricingController = require('../controllers/pricingController'); 
 
 const {
   authenticate,
@@ -21,10 +21,7 @@ router.use(authorize('super_admin'));
 // PRICING APPROVALS
 // ==========================================
 
-// Get all pending price change requests
 router.get('/pricing/pending', pricingController.getPendingRequests);
-
-// Approve or decline a specific request
 router.put('/pricing/:id/review', pricingController.reviewPriceChange);
 
 // ==========================================
@@ -76,6 +73,157 @@ router.get('/stats', async (req, res) => {
   } catch (error) {
     console.error('Admin statistics error:', error);
     return res.status(500).json({ error: 'Failed to retrieve dashboard statistics' });
+  }
+});
+
+// ==========================================
+// SYSTEM ANALYTICS
+// ==========================================
+
+router.get('/analytics', async (req, res) => {
+  try {
+    const [casesByHospital] = await pool.query(`
+      SELECT h.name AS hospital_name, COUNT(c.id) AS total_cases
+      FROM hospital h
+      LEFT JOIN \`case\` c ON c.hospital_id = h.id
+      GROUP BY h.id, h.name
+      ORDER BY total_cases DESC
+    `);
+
+    const [responseTimes] = await pool.query(`
+      SELECT 
+        h.name AS hospital_name,
+        COALESCE(ROUND(AVG(TIMESTAMPDIFF(MINUTE, c.requested_at, c.arrival_at)), 1), 0) AS avg_minutes,
+        COUNT(c.id) AS completed_cases
+      FROM hospital h
+      LEFT JOIN \`case\` c ON c.hospital_id = h.id 
+        AND c.arrival_at IS NOT NULL
+        AND c.status IN ('arrived_at_hospital', 'handed_over', 'in_treatment', 'payment_pending', 'paid', 'closed')
+      GROUP BY h.id, h.name
+      HAVING completed_cases > 0
+      ORDER BY avg_minutes ASC
+    `);
+
+    const [revenueByHospital] = await pool.query(`
+      SELECT 
+        h.name AS hospital_name,
+        COALESCE(SUM(p.amount), 0) AS total_revenue
+      FROM hospital h
+      LEFT JOIN payment p ON p.hospital_id = h.id AND p.status = 'completed'
+      GROUP BY h.id, h.name
+      ORDER BY total_revenue DESC
+    `);
+
+    return res.json({ casesByHospital, responseTimes, revenueByHospital });
+
+  } catch (err) {
+    console.error('Analytics error:', err);
+    return res.status(500).json({ error: 'Failed to generate analytics' });
+  }
+});
+
+// ==========================================
+// SETTLEMENTS OWED TO HOSPITALS
+// ==========================================
+
+router.get('/settlements', async (req, res) => {
+  try {
+    const PLATFORM_FEE_PERCENTAGE = 0.10; // 10% platform cut
+
+    const [settlements] = await pool.query(`
+      SELECT 
+        h.id AS hospital_id,
+        h.name AS hospital_name,
+        COUNT(p.id) AS total_transactions,
+        COALESCE(SUM(p.amount), 0) AS total_collected,
+        COALESCE(SUM(p.amount) * ?, 0) AS platform_fee,
+        COALESCE(SUM(p.amount) * (1 - ?), 0) AS amount_owed_to_hospital
+      FROM hospital h
+      LEFT JOIN payment p ON p.hospital_id = h.id AND p.status = 'completed'
+      GROUP BY h.id, h.name
+      HAVING total_collected > 0
+      ORDER BY amount_owed_to_hospital DESC
+    `, [PLATFORM_FEE_PERCENTAGE, PLATFORM_FEE_PERCENTAGE]);
+
+    res.json(settlements);
+  } catch (err) {
+    console.error('Settlements error:', err);
+    res.status(500).json({ error: 'Failed to retrieve settlements' });
+  }
+});
+
+// ==========================================
+// CHANGE USER ROLE
+// ==========================================
+router.put('/users/:id/role', async (req, res) => {
+  const userId = Number(req.params.id);
+  const { role } = req.body;
+  
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  const validRoles = ['hospital_staff', 'driver', 'hospital_admin'];
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be hospital_staff, driver, or hospital_admin.' });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [users] = await connection.query('SELECT id, name, role, hospital_id FROM staff WHERE id = ? FOR UPDATE', [userId]);
+    
+    if (users.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+
+    if (user.role === 'super_admin') {
+      await connection.rollback();
+      return res.status(403).json({ error: 'Cannot change the role of a Super Admin' });
+    }
+
+    if (user.role === role) {
+      await connection.rollback();
+      return res.status(400).json({ error: `User is already a ${role}` });
+    }
+
+    // If demoting a driver, make sure they are not assigned to an ambulance
+    if (user.role === 'driver' && role !== 'driver') {
+      const [ambulances] = await connection.query('SELECT id FROM ambulance WHERE driver_id = ? LIMIT 1', [userId]);
+      if (ambulances.length > 0) {
+        await connection.rollback();
+        return res.status(409).json({ error: 'Cannot change role. This driver is currently assigned to an ambulance. Unassign them first.' });
+      }
+    }
+
+    await connection.query('UPDATE staff SET role = ? WHERE id = ?', [role, userId]);
+    await connection.commit();
+
+    // Add to Audit Log
+    await pool.query(`
+      INSERT INTO audit_logs (actor_id, actor_name, actor_role, action_type, description)
+      VALUES (?, ?, ?, ?, ?)
+    `, [
+      req.user.id,
+      req.user.name || 'Super Admin',
+      'super_admin',
+      'ROLE_CHANGE',
+      `Changed role for ${user.name} from ${user.role} to ${role}.`
+    ]);
+
+    return res.json({ message: `Role for ${user.name} successfully updated to ${role}.` });
+
+  } catch (err) {
+    if (connection) await connection.rollback();
+    console.error('Role change error:', err);
+    return res.status(500).json({ error: 'Failed to update user role' });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -506,6 +654,24 @@ router.get('/payments', async (req, res) => {
   } catch (error) {
     console.error('Admin payment monitoring error:', error);
     res.status(500).json({ error: 'Failed to retrieve payment records' });
+  }
+});
+
+// ==========================================
+// AUDIT LOGS
+// ==========================================
+router.get('/audit-logs', async (req, res) => {
+  try {
+    const [logs] = await pool.query(`
+      SELECT id, actor_name, actor_role, action_type, description, created_at
+      FROM audit_logs
+      ORDER BY created_at DESC
+      LIMIT 100
+    `);
+    res.json(logs);
+  } catch (err) {
+    console.error('Audit logs error:', err);
+    res.status(500).json({ error: 'Failed to retrieve audit logs' });
   }
 });
 
