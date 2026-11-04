@@ -348,9 +348,11 @@ exports.getMyCases = async (req, res) => {
       SELECT
         c.id, c.emergency_desc, c.status, c.severity,
         c.payment_amount, c.pickup_lat, c.pickup_lng, c.requested_at,
-        h.id AS hospital_id, h.name AS hospital_name, h.location AS hospital_location
+        h.id AS hospital_id, h.name AS hospital_name, h.location AS hospital_location,
+        d.status AS dispute_status
       FROM \`case\` c
       JOIN hospital h ON c.hospital_id = h.id
+      LEFT JOIN disputes d ON c.id = d.case_id AND d.status = 'open'
       WHERE c.patient_id = ?
       ORDER BY c.requested_at DESC
     `, [req.user.id]);
@@ -667,8 +669,8 @@ exports.getDriverAssignedCases = async (req, res) => {
       SELECT c.id, c.emergency_desc, c.severity, c.status, c.pickup_lat, c.pickup_lng,
              c.requested_at, c.arrival_at, c.ambulance_id, c.accept_deadline,
              a.plate_number AS ambulance_plate,
-             a.current_lat AS ambulance_lat,   /* <-- ADDED FOR DRIVER MAP */
-             a.current_lng AS ambulance_lng,   /* <-- ADDED FOR DRIVER MAP */
+             a.current_lat AS ambulance_lat,
+             a.current_lng AS ambulance_lng,
              p.name AS patient_name, p.phone AS patient_phone,
              h.name AS hospital_name, h.location AS hospital_location,
              h.latitude AS hospital_lat, h.longitude AS hospital_lng

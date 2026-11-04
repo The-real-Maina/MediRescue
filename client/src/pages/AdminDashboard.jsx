@@ -4,7 +4,8 @@ import PriceApprovals from '../components/PriceApprovals'
 import SystemAnalytics from '../components/SystemAnalytics'
 import AuditLogs from '../components/AuditLogs'
 import Settlements from '../components/Settlements'
-import UserRoles from '../components/UserRoles' // ADDED
+import UserRoles from '../components/UserRoles'
+import DisputesManager from '../components/DisputesManager' // ADDED
 
 const API_URL = 'http://192.168.137.1:5000/api/admin'
 
@@ -183,12 +184,18 @@ export default function AdminDashboard() {
           >
             Settlements
           </button>
-          {/* ADDED USER ROLES TAB */}
           <button 
             className={`mr-admin-tab ${activeTab === 'roles' ? 'active' : ''}`}
             onClick={() => setActiveTab('roles')}
           >
             User Roles
+          </button>
+          {/* ADDED DISPUTES TAB */}
+          <button 
+            className={`mr-admin-tab ${activeTab === 'disputes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('disputes')}
+          >
+            Disputes
           </button>
         </div>
 
@@ -218,26 +225,12 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {activeTab === 'pricing' && (
-          <PriceApprovals />
-        )}
-
-        {activeTab === 'analytics' && (
-          <SystemAnalytics />
-        )}
-
-        {activeTab === 'logs' && (
-          <AuditLogs />
-        )}
-
-        {activeTab === 'settlements' && (
-          <Settlements />
-        )}
-
-        {/* ADDED USER ROLES RENDER */}
-        {activeTab === 'roles' && (
-          <UserRoles />
-        )}
+        {activeTab === 'pricing' && <PriceApprovals />}
+        {activeTab === 'analytics' && <SystemAnalytics />}
+        {activeTab === 'logs' && <AuditLogs />}
+        {activeTab === 'settlements' && <Settlements />}
+        {activeTab === 'roles' && <UserRoles />}
+        {activeTab === 'disputes' && <DisputesManager />} {/* ADDED */}
 
         <footer className="mr-admin-footer">MediRescue • Emergency Response Management System</footer>
       </main>

@@ -13,6 +13,7 @@ import StaffDashboard from './pages/StaffDashboard'
 import DriverDashboard from './pages/DriverDashboard'
 import HospitalAdminDashboard from './pages/HospitalAdminDashboard'
 import HospitalAdminTeam from './pages/HospitalAdminTeam'
+import AdminDisputes from './pages/AdminDisputes' // ADDED THIS IMPORT
 import AdminDashboard from './pages/AdminDashboard'
 import HospitalManagement from './pages/HospitalManagement'
 import EmergencyMonitoring from './pages/EmergencyMonitoring'
@@ -86,6 +87,8 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRole="hospital_admin"><DashboardLayout /></ProtectedRoute>}>
           <Route path="/hospital-admin-dashboard" element={<HospitalAdminDashboard />} />
           <Route path="/hospital-admin/team" element={<HospitalAdminTeam />} />
+          {/* ADDED THE DISPUTES ROUTE HERE */}
+          <Route path="/hospital-admin/disputes" element={<AdminDisputes />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRole="driver"><DashboardLayout /></ProtectedRoute>}>

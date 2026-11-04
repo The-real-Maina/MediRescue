@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, FaChevronDown, FaChevronRight, FaChartBar, FaFirstAid, FaCreditCard, FaSignOutAlt, FaMapMarkedAlt, FaHistory, FaNotesMedical, FaKey } from 'react-icons/fa'
+import { 
+  FaBars, FaTachometerAlt, FaAmbulance, FaUsers, FaUserMd, 
+  FaChevronDown, FaChevronRight, FaChartBar, FaFirstAid, 
+  FaCreditCard, FaSignOutAlt, FaMapMarkedAlt, FaHistory, 
+  FaNotesMedical, FaKey, FaExclamationCircle 
+} from 'react-icons/fa'
 
 const changePasswordItem = { title: 'Change Password', icon: FaKey, path: '/change-password' }
-
-// Patients use their own route so the page opens inside the patient layout.
 const patientChangePasswordItem = { title: 'Change Password', icon: FaKey, path: '/patient/change-password' }
 
 const menus = {
@@ -26,6 +29,7 @@ const menus = {
   hospital_admin: [
     { title: 'Team & Shifts', icon: FaUsers, path: '/hospital-admin-dashboard' },
     { title: 'Team Accounts', icon: FaUserMd, path: '/hospital-admin/team' },
+    { title: 'Patient Disputes', icon: FaExclamationCircle, path: '/hospital-admin/disputes' },
     changePasswordItem
   ],
   hospital_staff: [
@@ -67,10 +71,28 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [openMenu, setOpenMenu] = useState(null)
+  const [openDisputes, setOpenDisputes] = useState(0) // NEW STATE FOR BADGE
 
   let user = null
   try { user = JSON.parse(localStorage.getItem('medirescue_user') || 'null') }
   catch { user = null }
+
+  // FETCH DISPUTE COUNT FOR BADGE
+  useEffect(() => {
+    if (user?.role === 'hospital_admin') {
+      const token = localStorage.getItem('medirescue_token');
+      fetch('http://localhost:5000/api/cases/hospital-admin/disputes', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setOpenDisputes(data.filter(d => d.status === 'open').length);
+        }
+      })
+      .catch(err => console.error("Could not load dispute count", err));
+    }
+  }, [user?.role, location.pathname]); // Re-fetch when navigating
 
   const menuItems = menus[user?.role] || []
   const activeGroup = menuItems.find(item =>
@@ -146,7 +168,18 @@ export default function Sidebar() {
                     background: isActive ? '#2563eb' : 'transparent'
                   })}>
                   <Icon size={18} />
-                  {!collapsed && <span>{item.title}</span>}
+                  {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.title}</span>}
+                  
+                  {/* RENDER THE RED BADGE HERE */}
+                  {!collapsed && item.title === 'Patient Disputes' && openDisputes > 0 && (
+                    <span style={{ 
+                      background: '#dc2626', color: '#fff', 
+                      borderRadius: '20px', padding: '2px 8px', 
+                      fontSize: 11, fontWeight: 800 
+                    }}>
+                      {openDisputes}
+                    </span>
+                  )}
                 </NavLink>
               )}
             </div>

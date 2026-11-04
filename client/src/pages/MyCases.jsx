@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CaseChat from '../components/CaseChat'
 import PaymentReceipt from '../components/PaymentReceipt'
+import ReportIssue from '../components/ReportIssue'
 
 // ==========================================
 // MEDIRESCUE — MY EMERGENCY CASES
@@ -295,7 +296,7 @@ function MyCases() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  
+
   // Safely get user for the receipt
   let user = {}
   try {
@@ -313,7 +314,7 @@ function MyCases() {
     }
 
     try {
-      const response = await fetch('http://192.168.137.1:5000/api/cases', {
+      const response = await fetch('http://localhost:5000/api/cases', {
         headers: { Authorization: `Bearer ${token}` }
       })
 
@@ -425,7 +426,20 @@ function MyCases() {
                       <span style={styles.caseNumber}>CASE #{caseId}</span>
                       <h3 style={styles.cardTitle}>{caseItem.emergency_type || 'Emergency Request'}</h3>
                     </div>
-                    <span style={getStatusStyle(caseItem.status)}>{formatStatus(caseItem.status)}</span>
+                    
+                    {/* BADGES CONTAINER */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                      
+                      {/* DISPUTE UNDER REVIEW BADGE */}
+                      {caseItem.dispute_status === 'open' && (
+                        <span style={{ ...badgeBase, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                          ⚠️ Dispute Under Review
+                        </span>
+                      )}
+
+                      <span style={getStatusStyle(caseItem.status)}>{formatStatus(caseItem.status)}</span>
+                    </div>
+
                   </div>
 
                   <p style={styles.description}>{caseItem.emergency_desc || 'No emergency description provided.'}</p>
@@ -454,12 +468,16 @@ function MyCases() {
                       <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '15px' }}>
                         Your payment for this emergency case has been confirmed. You can download your official receipt below.
                       </p>
-                      <PaymentReceipt 
-                        caseData={caseItem} 
-                        patientName={user?.name || user?.full_name || 'Patient'} 
+                      <PaymentReceipt
+                        caseData={caseItem}
+                        patientName={user?.name || user?.full_name || 'Patient'}
                       />
                     </div>
                   )}
+
+                  {/* REPORT ISSUE FORM */}
+                  <ReportIssue caseId={caseId} />
+                  
                 </article>
               )
             })}

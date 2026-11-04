@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import ThemeToggle from '../components/ThemeToggle'
 
-// FIXED IP for School Wi-Fi
-const API_URL = 'http://172.16.45.18:5000/api/auth'
+// Changed to localhost so it connects to your running Node.js server on your PC
+const API_URL = 'http://localhost:5000/api/auth'
 
 const roles = [
   { value: 'patient', label: 'Patient', icon: '♡', description: 'Medical assistance' },

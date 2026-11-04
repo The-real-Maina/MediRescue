@@ -1,11 +1,7 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 
-// Roles stored in the staff table. For these, the account is
-// checked against the database on every request so that:
-//  - a released or deleted account loses access immediately
-//  - a password reset ends all older sessions
-//  - role and hospital come from the database, not the token
+// Roles stored in the staff table
 const STAFF_ROLES = ['hospital_staff', 'hospital_admin', 'driver'];
 
 exports.authenticate = async (req, res, next) => {
@@ -25,6 +21,9 @@ exports.authenticate = async (req, res, next) => {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
+  // ==========================================
+  // 1. STAFF ROLES (Hospital Staff, Admin, Driver)
+  // ==========================================
   if (STAFF_ROLES.includes(decoded.role)) {
     try {
       const [rows] = await pool.query(
@@ -61,7 +60,7 @@ exports.authenticate = async (req, res, next) => {
       decoded.hospital_id = acct.hospital_id;
       decoded.must_change_password = Number(acct.must_change_password) === 1;
 
-      // Forced first-login password change: nothing else works until done
+      // Forced first-login password change
       if (
         decoded.must_change_password &&
         !req.originalUrl.startsWith('/api/auth/change-password')
@@ -73,13 +72,58 @@ exports.authenticate = async (req, res, next) => {
       }
     } catch (err) {
       console.error('Account status check failed:', err);
-
       return res.status(500).json({
         error: 'Could not verify your account. Please try again.'
       });
     }
+  } 
+  
+  // ==========================================
+  // 2. PATIENT ROLE
+  // ==========================================
+  else if (decoded.role === 'patient') {
+    try {
+      const [rows] = await pool.query(
+        `SELECT id, name, phone FROM patient WHERE id = ?`,
+        [decoded.id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(401).json({ error: 'Patient account not found.' });
+      }
+      
+      // Attach fresh database data
+      decoded.name = rows[0].name;
+      decoded.phone = rows[0].phone;
+      
+    } catch (err) {
+      console.error('Patient status check failed:', err);
+      return res.status(500).json({ error: 'Could not verify your account.' });
+    }
   }
 
+  // ==========================================
+  // 3. SUPER ADMIN ROLE
+  // ==========================================
+  else if (decoded.role === 'super_admin') {
+    try {
+      const [rows] = await pool.query(
+        `SELECT id, email FROM super_admin WHERE id = ?`,
+        [decoded.id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(401).json({ error: 'Admin account not found.' });
+      }
+      
+      decoded.email = rows[0].email;
+    } catch (err) {
+      console.error('Admin status check failed:', err);
+      return res.status(500).json({ error: 'Could not verify your account.' });
+    }
+  }
+
+  // Attach the verified user to the request
   req.user = decoded;
   next();
 };
