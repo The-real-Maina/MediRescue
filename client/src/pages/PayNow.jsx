@@ -6,7 +6,8 @@ import { useNavigate } from 'react-router-dom'
 // LIGHT MODE — INLINE CSS ONLY
 // ==========================================
 
-const API_URL = 'http://192.168.137.1:5000/api'
+// ✅ FIXED: Now uses the proxy path instead of the hardcoded IP
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 const POLL_INTERVAL = 10000
 const MAX_CHECKS = 12
 

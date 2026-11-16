@@ -6,7 +6,8 @@ import StaffHRPanel from '../components/StaffHRPanel'
 import FlipTimer from '../components/FlipTimer'
 import useCountdown from '../hooks/useCountdown'
 
-const API = import.meta.env.VITE_API_URL || 'http://192.168.137.1:5000/api'
+// ✅ FIXED: Now uses the proxy path instead of the hardcoded IP
+const API = import.meta.env.VITE_API_URL || '/api'
 
 const COLORS = {
   navy: '#10243a',

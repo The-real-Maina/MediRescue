@@ -19,8 +19,10 @@ app.use('/api/messages', require('./routes/messageRoutes'));
 app.use('/api/tracking', require('./routes/trackingRoutes'));
 app.use('/api/health-profile', require('./routes/healthProfileRoutes'));
 app.use('/api/ambulances', require('./routes/ambulanceRoutes'));
+app.use('/api/assignments', require('./routes/assignmentRoutes'));
 app.use('/api/mpesa', require('./routes/mpesaRoutes'));
 app.use('/api/team-member', require('./routes/teamMemberRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 
 // Super Admin Routes
 app.use('/api/admin', require('./routes/adminAccountRoutes'));
@@ -35,6 +37,7 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`MediRescue server running on port ${PORT}`);
 });

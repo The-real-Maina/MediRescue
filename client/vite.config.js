@@ -7,7 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg'],
+      devOptions: {
+        enabled: true,
+        navigateFallback: 'index.html'
+      },
       manifest: {
         name: 'MediRescue Emergency',
         short_name: 'MediRescue',
@@ -40,5 +44,15 @@ export default defineConfig({
         ]
       }
     })
-  ]
+  ],
+  // THIS IS THE FIX: The proxy that connects frontend to backend
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
 })
