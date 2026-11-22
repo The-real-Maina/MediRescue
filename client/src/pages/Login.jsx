@@ -123,6 +123,9 @@ function Login() {
         setOtp('')
         setOtpStep(true)
         setError('')
+        // Demo mode: the server returns the code in the response so
+        // visitors can sign in without a paid SMS service.
+        setNotice(data.demoOtp ? data.message : '')
         return
       }
       finishLogin(data)
@@ -263,6 +266,7 @@ function Login() {
     setChallengeId(null)
     setOtp('')
     setError('')
+    setNotice('')
   }
 
   const isRecovering = recoveryMode !== 'login'

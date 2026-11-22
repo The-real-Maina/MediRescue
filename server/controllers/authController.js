@@ -1,9 +1,20 @@
-
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { sendOtpSms } = require('../services/smsService');
+
+// ==========================================
+// OTP DEMO MODE
+// Set OTP_DEMO_MODE=true ONLY on the public demo server.
+// When on, one-time codes are returned in the API response
+// (field "demoOtp") instead of being sent by SMS or printed in
+// the server terminal, so visitors can complete login and
+// registration without a paid SMS service.
+// When it is not set (local development), nothing changes.
+// ==========================================
+
+const isOtpDemoMode = () => process.env.OTP_DEMO_MODE === 'true';
 
 // ==========================================
 // PATIENT REGISTRATION (DIRECT)
@@ -157,9 +168,12 @@ exports.login = async (req, res) => {
 
     // Second authentication step for staff, hospital admins and drivers.
     if (['hospital_staff', 'hospital_admin', 'driver'].includes(role)) {
+      const demoOtp = isOtpDemoMode();
+
       if (
-        process.env.NODE_ENV === 'production' ||
-        process.env.OTP_DELIVERY_MODE !== 'terminal'
+        !demoOtp &&
+        (process.env.NODE_ENV === 'production' ||
+          process.env.OTP_DELIVERY_MODE !== 'terminal')
       ) {
         return res.status(503).json({
           error: 'Staff OTP delivery is not configured.'
@@ -205,6 +219,15 @@ exports.login = async (req, res) => {
       console.log(`OTP: ${code}`);
       console.log('Expires in: 5 minutes');
       console.log('========================================\n');
+
+      if (demoOtp) {
+        return res.status(200).json({
+          message: `Demo mode: your OTP is ${code}. It expires in 5 minutes.`,
+          requiresOtp: true,
+          challengeId: result.insertId,
+          demoOtp: code
+        });
+      }
 
       return res.status(200).json({
         message: 'Password accepted. Enter the OTP shown in the development server terminal.',
@@ -267,8 +290,9 @@ exports.verifyStaffLoginOtp = async (req, res) => {
   }
 
   if (
-    process.env.NODE_ENV === 'production' ||
-    process.env.OTP_DELIVERY_MODE !== 'terminal'
+    !isOtpDemoMode() &&
+    (process.env.NODE_ENV === 'production' ||
+      process.env.OTP_DELIVERY_MODE !== 'terminal')
   ) {
     return res.status(503).json({
       error: 'Staff OTP delivery is not configured.'
@@ -457,6 +481,14 @@ exports.requestRegistrationOtp = async (req, res) => {
         REGISTRATION_OTP_EXPIRY_MINUTES
       ]
     );
+
+    // Demo mode: skip the SMS and hand the code back to the browser.
+    if (isOtpDemoMode()) {
+      return res.status(200).json({
+        message: `Demo mode: your verification code is ${code}.`,
+        demoOtp: code
+      });
+    }
 
     try {
       await sendOtpSms(cleanPhone, code);
@@ -685,6 +717,14 @@ exports.requestOtp = async (req, res) => {
        VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
       [cleanPhone, codeHash, OTP_EXPIRY_MINUTES]
     );
+
+    // Demo mode: skip the SMS and hand the code back to the browser.
+    if (isOtpDemoMode()) {
+      return res.status(200).json({
+        message: `Demo mode: your login code is ${code}.`,
+        demoOtp: code
+      });
+    }
 
     try {
       await sendOtpSms(cleanPhone, code);

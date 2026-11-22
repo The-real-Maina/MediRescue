@@ -1,9 +1,14 @@
-
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { sendOtpSms } = require('../services/smsService');
+
+// OTP DEMO MODE: set OTP_DEMO_MODE=true ONLY on the public demo server.
+// When on, the password-reset code is returned in the API response
+// (field "demoOtp") instead of being sent by SMS.
+// When it is not set (local development), nothing changes.
+const isOtpDemoMode = () => process.env.OTP_DEMO_MODE === 'true';
 
 const ACCOUNT_TABLES = {
   patient: 'patient',
@@ -247,6 +252,14 @@ exports.requestPasswordResetOtp = async (req, res) => {
          (?, ?, DATE_ADD(NOW(), INTERVAL ${OTP_EXPIRY_MINUTES} MINUTE), 0, 0)`,
       [normalizedPhone, codeHash]
     );
+
+    // Demo mode: skip the SMS and hand the code back to the browser.
+    if (isOtpDemoMode()) {
+      return res.status(200).json({
+        message: `Demo mode: your password-reset code is ${code}.`,
+        demoOtp: code
+      });
+    }
 
     try {
       await sendOtpSms(normalizedPhone, code);
