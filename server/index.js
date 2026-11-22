@@ -6,7 +6,21 @@ const pool = require('./config/db');
 
 const app = express();
 
-app.use(cors());
+// CORS: set CLIENT_ORIGIN on the live server to your frontend address
+// (comma-separated for more than one). When it is not set (local
+// development), every origin is allowed, exactly as before.
+const allowedOrigins = (process.env.CLIENT_ORIGIN || '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
+app.use(
+  cors(
+    allowedOrigins.length
+      ? { origin: allowedOrigins }
+      : undefined
+  )
+);
 app.use(express.json());
 
 // ==========================================

@@ -1,2 +1,9 @@
 node_modules
 .env
+.env.*
+!.env.example
+dist
+client/dev-dist/
+mobile/.claude/
+*.log
+.DS_Store

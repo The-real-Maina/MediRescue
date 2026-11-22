@@ -6,7 +6,7 @@ import StaffHRPanel from '../components/StaffHRPanel'
 import FlipTimer from '../components/FlipTimer'
 import useCountdown from '../hooks/useCountdown'
 
-// ✅ FIXED: Now uses the proxy path instead of the hardcoded IP
+// Uses the proxy path instead of a hardcoded IP
 const API = import.meta.env.VITE_API_URL || '/api'
 
 const COLORS = {
@@ -491,8 +491,8 @@ function TrackingCard({ item }) {
 
 // Helper component to safely wrap the hook inside the map loop
 function DashboardTimer({ deadline }) {
-  const secs = useCountdown(deadline);
-  return <FlipTimer seconds={secs} />;
+  const secs = useCountdown(deadline)
+  return <FlipTimer seconds={secs} />
 }
 
 export default function StaffDashboard({ view = 'dashboard' }) {
@@ -1236,7 +1236,6 @@ export default function StaffDashboard({ view = 'dashboard' }) {
 
                   const isBusy = updatingCase !== null
 
-                  const suggestion = suggestionsByCase[caseItem.id]
                   const ambulanceOptions = getAmbulanceOptions(caseItem.id)
                   const closestAmbulance = ambulanceOptions.find(
                     item => item.suggested
@@ -1361,11 +1360,11 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                               </div>
                             )}
 
-                            {/* THE 3D FLIP TIMER USING THE WRAPPER COMPONENT */}
+                            {/* 3D flip timer using the wrapper component */}
                             {caseItem.status === 'assigned' && caseItem.accept_deadline && (
-                               <div style={{ marginTop: 20 }}>
-                                  <DashboardTimer deadline={caseItem.accept_deadline} />
-                               </div>
+                              <div style={{ marginTop: 20 }}>
+                                <DashboardTimer deadline={caseItem.accept_deadline} />
+                              </div>
                             )}
 
                             {ambulanceOptions.length > 0 ? (
@@ -1414,7 +1413,7 @@ export default function StaffDashboard({ view = 'dashboard' }) {
                                 >
                                   {dispatchingCase === caseItem.id
                                     ? 'Dispatching...'
-                                    : caseItem.status === 'assigned' 
+                                    : caseItem.status === 'assigned'
                                       ? 'Reassign Ambulance →'
                                       : 'Dispatch Ambulance →'}
                                 </button>

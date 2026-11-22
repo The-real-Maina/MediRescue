@@ -8,6 +8,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      // Keep the service worker from ever answering API requests with index.html
+      workbox: {
+        navigateFallbackDenylist: [/^\/api/]
+      },
       devOptions: {
         enabled: true,
         navigateFallback: 'index.html'
@@ -45,7 +49,8 @@ export default defineConfig({
       }
     })
   ],
-  // THIS IS THE FIX: The proxy that connects frontend to backend
+  // Dev only: connects the frontend to the local backend.
+  // This does not exist in production, which is why VITE_API_ORIGIN is needed there.
   server: {
     proxy: {
       '/api': {
