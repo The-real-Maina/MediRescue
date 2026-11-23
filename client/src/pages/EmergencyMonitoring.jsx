@@ -1,8 +1,9 @@
-
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = 'http://192.168.137.1:5000/api/admin/emergencies'
+// Uses VITE_API_URL from client/.env (falls back to localhost for development)
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = `${API_BASE}/api/admin/emergencies`
 
 const colors = {
   navy: '#102a43',

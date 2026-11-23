@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function DisputesManager() {
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -7,7 +9,7 @@ export default function DisputesManager() {
 
   const fetchDisputes = () => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://192.168.137.1:5000/api/cases/admin/disputes', {
+    fetch(`${API_BASE}/api/cases/admin/disputes`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -27,7 +29,7 @@ export default function DisputesManager() {
     if (!window.confirm('Mark this dispute as resolved?')) return;
     const token = localStorage.getItem('medirescue_token');
     try {
-      const res = await fetch(`http://192.168.137.1:5000/api/cases/admin/disputes/${id}`, {
+      const res = await fetch(`${API_BASE}/api/cases/admin/disputes/${id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` }
       });

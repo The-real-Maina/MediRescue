@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 
+// Uses VITE_API_URL from client/.env (falls back to localhost for development)
+const API_ORIGIN = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const PRICING_API = `${API_ORIGIN}/api/hospital-admin/pricing`;
+
 export default function PricingManager() {
   const [prices, setPrices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
@@ -16,10 +20,7 @@ export default function PricingManager() {
       return;
     }
 
-    const url = 'http://192.168.137.1:5000/api/hospital-admin/pricing/current';
-    console.log("Fetching prices with token:", token.substring(0, 10) + "..."); 
-
-    fetch(url, {
+    fetch(`${PRICING_API}/current`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(async (res) => {
@@ -49,7 +50,7 @@ export default function PricingManager() {
     setError(''); setMessage('');
 
     try {
-      const res = await fetch('http://192.168.137.1:5000/api/hospital-admin/pricing/request', {
+      const res = await fetch(`${PRICING_API}/request`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 

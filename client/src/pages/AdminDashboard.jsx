@@ -7,7 +7,8 @@ import Settlements from '../components/Settlements'
 import UserRoles from '../components/UserRoles'
 import DisputesManager from '../components/DisputesManager' // ADDED
 
-const API_URL = 'http://192.168.137.1:5000/api/admin'
+const API_ORIGIN = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = `${API_ORIGIN}/api/admin`
 
 function formatMoney(amount) {
   return `KSh ${Number(amount || 0).toLocaleString('en-KE', {
@@ -126,7 +127,6 @@ export default function AdminDashboard() {
         .mr-admin-footer{text-align:center;font-size:12px;color:#8191a5;margin-top:42px}
         @media(max-width:450px){.mr-admin-stats{grid-template-columns:1fr}.mr-admin-account{width:100%;justify-content:space-between}.mr-admin-stat{min-height:110px}.mr-admin-title{font-size:29px}}
         
-        /* TABS CSS */
         .mr-admin-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #e0e8f0; padding-bottom: 15px; overflow-x: auto; }
         .mr-admin-tab { padding: 10px 20px; background: transparent; color: #637a96; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; white-space: nowrap;}
         .mr-admin-tab.active { background: #e5232b; color: white; }
@@ -152,7 +152,6 @@ export default function AdminDashboard() {
         <h1 className="mr-admin-title">Super Admin Dashboard</h1>
         <p className="mr-admin-desc">Oversee hospitals, emergency operations, ambulance availability, payments and system activity from one place.</p>
 
-        {/* TABS */}
         <div className="mr-admin-tabs">
           <button 
             className={`mr-admin-tab ${activeTab === 'overview' ? 'active' : ''}`}
@@ -190,7 +189,6 @@ export default function AdminDashboard() {
           >
             User Roles
           </button>
-          {/* ADDED DISPUTES TAB */}
           <button 
             className={`mr-admin-tab ${activeTab === 'disputes' ? 'active' : ''}`}
             onClick={() => setActiveTab('disputes')}
@@ -230,7 +228,7 @@ export default function AdminDashboard() {
         {activeTab === 'logs' && <AuditLogs />}
         {activeTab === 'settlements' && <Settlements />}
         {activeTab === 'roles' && <UserRoles />}
-        {activeTab === 'disputes' && <DisputesManager />} {/* ADDED */}
+        {activeTab === 'disputes' && <DisputesManager />}
 
         <footer className="mr-admin-footer">MediRescue • Emergency Response Management System</footer>
       </main>

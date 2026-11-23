@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // Custom Tooltip component for a clean look
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -23,7 +25,7 @@ export default function SystemAnalytics() {
 
   useEffect(() => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://192.168.137.1:5000/api/admin/analytics', {
+    fetch(`${API_BASE}/api/admin/analytics`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(async (res) => {

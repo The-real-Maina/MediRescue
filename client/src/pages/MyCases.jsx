@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import CaseChat from '../components/CaseChat'
 import PaymentReceipt from '../components/PaymentReceipt'
 import ReportIssue from '../components/ReportIssue'
+import FirstAidChat from '../components/FirstAidChat'
 
 // ==========================================
 // MEDIRESCUE — MY EMERGENCY CASES
@@ -10,6 +11,10 @@ import ReportIssue from '../components/ReportIssue'
 // ==========================================
 
 const REFRESH_INTERVAL = 10000
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
+// A case is "live" until it is paid or closed
+const ACTIVE_STATUSES = ['requested', 'assigned', 'dispatched', 'picked_up', 'in_treatment']
 
 const styles = {
   page: {
@@ -18,7 +23,6 @@ const styles = {
     color: '#17233b',
     fontFamily: "'Segoe UI', Arial, sans-serif"
   },
-
   header: {
     background: '#10243a',
     borderBottom: '4px solid #dc2626',
@@ -29,21 +33,8 @@ const styles = {
     flexWrap: 'wrap',
     gap: 16
   },
-
-  brand: {
-    color: '#ffffff',
-    fontSize: 25,
-    fontWeight: 800,
-    margin: 0
-  },
-
-  portal: {
-    color: '#cbd5e1',
-    fontSize: 10,
-    letterSpacing: 1.6,
-    marginTop: 5
-  },
-
+  brand: { color: '#ffffff', fontSize: 25, fontWeight: 800, margin: 0 },
+  portal: { color: '#cbd5e1', fontSize: 10, letterSpacing: 1.6, marginTop: 5 },
   headerButton: {
     background: 'transparent',
     color: '#ffffff',
@@ -53,13 +44,7 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer'
   },
-
-  container: {
-    maxWidth: 1150,
-    margin: '0 auto',
-    padding: '42px 20px 65px'
-  },
-
+  container: { maxWidth: 1150, margin: '0 auto', padding: '42px 20px 65px' },
   backButton: {
     background: 'transparent',
     border: 'none',
@@ -70,7 +55,6 @@ const styles = {
     padding: 0,
     marginBottom: 28
   },
-
   eyebrow: {
     color: '#dc2626',
     fontSize: 12,
@@ -78,21 +62,13 @@ const styles = {
     letterSpacing: 1.5,
     marginBottom: 10
   },
-
   title: {
     color: '#10243a',
     fontSize: 'clamp(28px, 4vw, 38px)',
     fontWeight: 800,
     margin: '0 0 12px'
   },
-
-  subtitle: {
-    color: '#64748b',
-    fontSize: 15,
-    lineHeight: 1.7,
-    margin: 0
-  },
-
+  subtitle: { color: '#64748b', fontSize: 15, lineHeight: 1.7, margin: 0 },
   summary: {
     display: 'flex',
     alignItems: 'center',
@@ -107,21 +83,13 @@ const styles = {
     marginBottom: 30,
     boxShadow: '0 5px 20px rgba(15,23,42,0.04)'
   },
-
   summaryLabel: {
     color: '#64748b',
     fontSize: 12,
     fontWeight: 700,
     letterSpacing: 0.5
   },
-
-  summaryNumber: {
-    color: '#10243a',
-    fontSize: 30,
-    fontWeight: 800,
-    marginTop: 5
-  },
-
+  summaryNumber: { color: '#10243a', fontSize: 30, fontWeight: 800, marginTop: 5 },
   redButton: {
     background: '#dc2626',
     color: '#ffffff',
@@ -132,13 +100,7 @@ const styles = {
     fontWeight: 800,
     cursor: 'pointer'
   },
-
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 20
-  },
-
+  list: { display: 'flex', flexDirection: 'column', gap: 20 },
   card: {
     background: '#ffffff',
     border: '1px solid #e2e8f0',
@@ -146,7 +108,6 @@ const styles = {
     padding: 'clamp(20px, 4vw, 28px)',
     boxShadow: '0 6px 22px rgba(15,23,42,0.05)'
   },
-
   cardHeader: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -155,7 +116,6 @@ const styles = {
     gap: 15,
     marginBottom: 20
   },
-
   caseNumber: {
     color: '#dc2626',
     fontSize: 12,
@@ -164,35 +124,14 @@ const styles = {
     marginBottom: 8,
     display: 'block'
   },
-
-  cardTitle: {
-    color: '#10243a',
-    fontSize: 21,
-    fontWeight: 800,
-    margin: 0
-  },
-
-  description: {
-    color: '#64748b',
-    fontSize: 14,
-    lineHeight: 1.7,
-    margin: '0 0 22px'
-  },
-
-  divider: {
-    border: 'none',
-    height: 1,
-    background: '#e2e8f0',
-    margin: '0 0 22px'
-  },
-
+  cardTitle: { color: '#10243a', fontSize: 21, fontWeight: 800, margin: 0 },
+  description: { color: '#64748b', fontSize: 14, lineHeight: 1.7, margin: '0 0 22px' },
+  divider: { border: 'none', height: 1, background: '#e2e8f0', margin: '0 0 22px' },
   details: {
     display: 'grid',
-    gridTemplateColumns:
-      'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
     gap: 22
   },
-
   detailLabel: {
     display: 'block',
     color: '#94a3b8',
@@ -202,14 +141,7 @@ const styles = {
     textTransform: 'uppercase',
     marginBottom: 8
   },
-
-  detailValue: {
-    color: '#334155',
-    fontSize: 14,
-    fontWeight: 700,
-    overflowWrap: 'anywhere'
-  },
-
+  detailValue: { color: '#334155', fontSize: 14, fontWeight: 700, overflowWrap: 'anywhere' },
   message: {
     background: '#ffffff',
     border: '1px solid #e2e8f0',
@@ -220,7 +152,6 @@ const styles = {
     fontSize: 14,
     lineHeight: 1.7
   },
-
   error: {
     background: '#fee2e2',
     color: '#991b1b',
@@ -231,7 +162,6 @@ const styles = {
     fontSize: 14,
     lineHeight: 1.7
   },
-
   emptyIcon: {
     width: 65,
     height: 65,
@@ -245,13 +175,7 @@ const styles = {
     fontSize: 30,
     fontWeight: 800
   },
-
-  footer: {
-    color: '#94a3b8',
-    textAlign: 'center',
-    fontSize: 12,
-    marginTop: 45
-  }
+  footer: { color: '#94a3b8', textAlign: 'center', fontSize: 12, marginTop: 45 }
 }
 
 // ==========================================
@@ -314,7 +238,7 @@ function MyCases() {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/cases', {
+      const response = await fetch(`${API_BASE}/api/cases`, {
         headers: { Authorization: `Bearer ${token}` }
       })
 
@@ -359,6 +283,9 @@ function MyCases() {
     ...badgeBase,
     ...(severityStyles[severity] || { background: '#f1f5f9', color: '#475569' })
   })
+
+  // Show the first-aid assistant only while at least one case is live
+  const hasActiveCase = cases.some((c) => ACTIVE_STATUSES.includes(c.status))
 
   return (
     <div style={styles.page}>
@@ -426,20 +353,15 @@ function MyCases() {
                       <span style={styles.caseNumber}>CASE #{caseId}</span>
                       <h3 style={styles.cardTitle}>{caseItem.emergency_type || 'Emergency Request'}</h3>
                     </div>
-                    
-                    {/* BADGES CONTAINER */}
+
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                      
-                      {/* DISPUTE UNDER REVIEW BADGE */}
                       {caseItem.dispute_status === 'open' && (
                         <span style={{ ...badgeBase, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
                           ⚠️ Dispute Under Review
                         </span>
                       )}
-
                       <span style={getStatusStyle(caseItem.status)}>{formatStatus(caseItem.status)}</span>
                     </div>
-
                   </div>
 
                   <p style={styles.description}>{caseItem.emergency_desc || 'No emergency description provided.'}</p>
@@ -475,9 +397,7 @@ function MyCases() {
                     </div>
                   )}
 
-                  {/* REPORT ISSUE FORM */}
                   <ReportIssue caseId={caseId} />
-                  
                 </article>
               )
             })}
@@ -488,6 +408,9 @@ function MyCases() {
           © {new Date().getFullYear()} MediRescue {' '}• Emergency Medical Response System
         </footer>
       </main>
+
+      {/* Floating first-aid assistant — live cases only */}
+      {!loading && !error && hasActiveCase && <FirstAidChat />}
     </div>
   )
 }

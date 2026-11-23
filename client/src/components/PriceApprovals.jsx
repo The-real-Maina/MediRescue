@@ -7,13 +7,14 @@ export default function PriceApprovals() {
   const token = localStorage.getItem('medirescue_token');
 
   const fetchRequests = () => {
-    fetch('http://192.168.137.1:5000/api/admin/pricing/pending', {
+    fetch('/api/admin/pricing/pending', {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setRequests(data);
-      });
+      })
+      .catch(() => {});
   };
 
   useEffect(() => { fetchRequests(); }, []);
@@ -24,7 +25,7 @@ export default function PriceApprovals() {
       return;
     }
 
-    const res = await fetch(`http://192.168.137.1:5000/api/admin/pricing/${id}/review`, {
+    const res = await fetch(`/api/admin/pricing/${id}/review`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action, decline_reason: declineReason })

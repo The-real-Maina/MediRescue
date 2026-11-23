@@ -1,8 +1,9 @@
-
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = 'http://192.168.137.1:5000/api/admin/payments'
+// Uses VITE_API_URL from client/.env (falls back to localhost for development)
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = `${API_BASE}/api/admin/payments`
 
 const css = `
 .pm-page{min-height:100vh;background:#eff4fa;color:#102a43;font-family:'Segoe UI',Arial,sans-serif}

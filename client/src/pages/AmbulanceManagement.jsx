@@ -1,708 +1,278 @@
 import { useEffect, useState } from 'react'
-
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = 'http://192.168.137.1:5000/api/admin'
+const API_ORIGIN = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_BASE = `${API_ORIGIN}/api/admin`
 
 const emptyDriverForm = { name: '', email: '', password: '', hospital_id: '' }
 
-
-
 const emptyForm = {
-
   plate_number: '',
-
   hospital_id: ''
-
 }
 
 function AmbulanceManagement() {
-
   const navigate = useNavigate()
-
   const [ambulances, setAmbulances] = useState([])
-
   const [hospitals, setHospitals] = useState([])
-
   const [drivers, setDrivers] = useState([])
-
   const [driverForm, setDriverForm] = useState(emptyDriverForm)
-
   const [driverSaving, setDriverSaving] = useState(false)
-
   const [driverError, setDriverError] = useState('')
-
   const [driverSuccess, setDriverSuccess] = useState('')
-
   const [loading, setLoading] = useState(true)
-
   const [saving, setSaving] = useState(false)
-
   const [error, setError] = useState('')
-
   const [formError, setFormError] = useState('')
-
   const [success, setSuccess] = useState('')
-
   const [search, setSearch] = useState('')
-
   const [statusFilter, setStatusFilter] = useState('all')
-
   const [formData, setFormData] = useState(emptyForm)
-
   const [editingId, setEditingId] = useState(null)
-
   const [editForm, setEditForm] = useState({
-
     plate_number: '',
-
     hospital_id: '',
-
     driver_id: ''
-
   })
-
   const [editError, setEditError] = useState('')
-
   const [editSuccess, setEditSuccess] = useState('')
-
   const [editSaving, setEditSaving] = useState(false)
 
-  // ==========================================
-
-  // AUTHENTICATED API REQUEST
-
-  // ==========================================
-
   const apiRequest = async (endpoint, options = {}) => {
-
     const token = localStorage.getItem('medirescue_token')
-
     if (!token) {
-
       navigate('/login', { replace: true })
-
       throw new Error('Please log in again')
-
     }
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
-
       ...options,
-
       headers: {
-
         Authorization: `Bearer ${token}`,
-
-        ...(options.body
-
-          ? { 'Content-Type': 'application/json' }
-
-          : {}),
-
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers
-
       }
-
     })
 
     if (response.status === 401 || response.status === 403) {
-
       localStorage.removeItem('medirescue_token')
-
       localStorage.removeItem('medirescue_user')
-
       navigate('/login', { replace: true })
-
-      throw new Error(
-
-        'Your session has expired or access was denied'
-
-      )
-
+      throw new Error('Your session has expired or access was denied')
     }
 
-    const contentType =
-
-      response.headers.get('content-type') || ''
-
+    const contentType = response.headers.get('content-type') || ''
     if (!contentType.includes('application/json')) {
-
-      throw new Error(
-
-        `Unexpected server response (${response.status})`
-
-      )
-
+      throw new Error(`Unexpected server response (${response.status})`)
     }
 
     const data = await response.json()
-
     if (!response.ok) {
-
       throw new Error(data.error || 'Request failed')
-
     }
 
     return data
-
   }
-
-  // ==========================================
-
-  // LOAD AMBULANCES
-
-  // ==========================================
 
   const loadAmbulances = async () => {
-
     setLoading(true)
-
     setError('')
-
     try {
-
       const data = await apiRequest('/ambulances')
-
       if (!Array.isArray(data)) {
-
         throw new Error('Unexpected ambulance response')
-
       }
-
       setAmbulances(data)
-
       return data
-
     } catch (err) {
-
       setError(err.message || 'Unable to load ambulances')
-
       return null
-
     } finally {
-
       setLoading(false)
-
     }
-
   }
 
-  // ==========================================
-
-  // LOAD HOSPITALS AND DRIVERS
-
-  // ==========================================
-
   const loadOptions = async () => {
-
     try {
-
       const [hospitalData, driverData] = await Promise.all([
-
         apiRequest('/hospitals'),
-
         apiRequest('/drivers')
-
       ])
-
-      if (
-
-        !Array.isArray(hospitalData) ||
-
-        !Array.isArray(driverData)
-
-      ) {
-
+      if (!Array.isArray(hospitalData) || !Array.isArray(driverData)) {
         throw new Error('Unexpected hospital or driver response')
-
       }
-
       setHospitals(hospitalData)
-
       setDrivers(driverData)
-
     } catch (err) {
-
-      setFormError(
-
-        err.message || 'Unable to load hospitals and drivers'
-
-      )
-
+      setFormError(err.message || 'Unable to load hospitals and drivers')
     }
-
   }
 
   useEffect(() => {
-
     loadAmbulances()
-
     loadOptions()
-
   }, [])
 
-  // ==========================================
-
-  // REGISTER AMBULANCE
-
-  // ==========================================
-
   const handleRegister = async (event) => {
-
     event.preventDefault()
-
     setFormError('')
-
     setSuccess('')
-
     const plate = formData.plate_number.trim().toUpperCase()
-
     const hospitalId = Number(formData.hospital_id)
 
     if (!plate || plate.length > 20) {
-
       setFormError('Enter a valid ambulance plate number')
-
       return
-
     }
-
-    if (
-
-      !formData.hospital_id ||
-
-      !Number.isSafeInteger(hospitalId) ||
-
-      hospitalId <= 0
-
-    ) {
-
+    if (!formData.hospital_id || !Number.isSafeInteger(hospitalId) || hospitalId <= 0) {
       setFormError('Please select a hospital')
-
       return
-
     }
 
     setSaving(true)
-
     try {
-
       const result = await apiRequest('/ambulances', {
-
         method: 'POST',
-
-        body: JSON.stringify({
-
-          plate_number: plate,
-
-          hospital_id: hospitalId
-
-        })
-
+        body: JSON.stringify({ plate_number: plate, hospital_id: hospitalId })
       })
-
       setFormData(emptyForm)
-
       setSearch('')
-
       setStatusFilter('all')
-
-      setSuccess(
-
-        result.message || 'Ambulance registered successfully'
-
-      )
-
+      setSuccess(result.message || 'Ambulance registered successfully')
       await loadAmbulances()
-
     } catch (err) {
-
       setFormError(err.message || 'Failed to register ambulance')
-
     } finally {
-
       setSaving(false)
-
     }
-
   }
-
-  // ==========================================
-
-  // REGISTER NEW DRIVER
-
-  // ==========================================
-
-
 
   const handleRegisterDriver = async (event) => {
-
     event.preventDefault()
-
     if (driverSaving) return
 
-
-
     setDriverError('')
-
     setDriverSuccess('')
 
-
-
     const name = driverForm.name.trim()
-
     const email = driverForm.email.trim().toLowerCase()
-
     const hospitalId = Number(driverForm.hospital_id)
 
-
-
     if (!name || name.length > 100) {
-
       setDriverError('Enter a valid driver name')
-
       return
-
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 100) {
-
       setDriverError('Enter a valid email address')
-
       return
-
     }
-
     if (driverForm.password.length < 8) {
-
       setDriverError('Password must contain at least 8 characters')
-
       return
-
     }
-
     if (!Number.isSafeInteger(hospitalId) || hospitalId <= 0) {
-
       setDriverError('Select the driver hospital')
-
       return
-
     }
-
-
 
     setDriverSaving(true)
-
     try {
-
       const result = await apiRequest('/drivers', {
-
         method: 'POST',
-
-        body: JSON.stringify({
-
-          name,
-
-          email,
-
-          password: driverForm.password,
-
-          hospital_id: hospitalId
-
-        })
-
+        body: JSON.stringify({ name, email, password: driverForm.password, hospital_id: hospitalId })
       })
-
       setDriverForm(emptyDriverForm)
-
       setDriverSuccess(result.message || 'Driver registered successfully')
-
       await loadOptions()
-
     } catch (err) {
-
       setDriverError(err.message || 'Failed to register driver')
-
     } finally {
-
       setDriverSaving(false)
-
     }
-
   }
-
-
-
-  // ==========================================
-
-  // START EDITING
-
-  // ==========================================
 
   const handleEdit = (ambulance) => {
-
     if (ambulance.status !== 'available') {
-
-      setEditError(
-
-        'Only available ambulances can be edited'
-
-      )
-
+      setEditError('Only available ambulances can be edited')
       return
-
     }
-
     setEditingId(ambulance.id)
-
     setEditError('')
-
     setEditSuccess('')
-
     setEditForm({
-
       plate_number: ambulance.plate_number || '',
-
       hospital_id: String(ambulance.hospital_id ?? ''),
-
-      driver_id: ambulance.driver_id == null
-
-        ? ''
-
-        : String(ambulance.driver_id)
-
+      driver_id: ambulance.driver_id == null ? '' : String(ambulance.driver_id)
     })
-
   }
-
-  // ==========================================
-
-  // CANCEL EDITING
-
-  // ==========================================
 
   const handleCancelEdit = () => {
-
     setEditingId(null)
-
     setEditError('')
-
-    setEditForm({
-
-      plate_number: '',
-
-      hospital_id: '',
-
-      driver_id: ''
-
-    })
-
+    setEditForm({ plate_number: '', hospital_id: '', driver_id: '' })
   }
 
-  // ==========================================
-
-  // AVAILABLE DRIVERS FOR SELECTED HOSPITAL
-
-  // ==========================================
-
   const eligibleDrivers = drivers.filter((driver) => {
-
-    if (
-
-      Number(driver.hospital_id) !==
-
-      Number(editForm.hospital_id)
-
-    ) {
-
+    if (Number(driver.hospital_id) !== Number(editForm.hospital_id)) {
       return false
-
     }
-
     const assignedToOtherAmbulance = ambulances.some(
-
-      (ambulance) =>
-
-        Number(ambulance.driver_id) === Number(driver.id) &&
-
-        ambulance.id !== editingId
-
+      (ambulance) => Number(ambulance.driver_id) === Number(driver.id) && ambulance.id !== editingId
     )
-
     return !assignedToOtherAmbulance
-
   })
 
-  // ==========================================
-
-  // SAVE AMBULANCE CHANGES
-
-  // ==========================================
-
   const handleSaveEdit = async (event) => {
-
     event.preventDefault()
-
     if (editSaving) return
-
     setEditError('')
-
     setEditSuccess('')
-
     const plate = editForm.plate_number.trim().toUpperCase()
-
     const hospitalId = Number(editForm.hospital_id)
-
-    const driverId = editForm.driver_id
-
-      ? Number(editForm.driver_id)
-
-      : null
+    const driverId = editForm.driver_id ? Number(editForm.driver_id) : null
 
     if (!plate || plate.length > 20) {
-
       setEditError('Enter a valid plate number')
-
       return
-
     }
-
-    if (
-
-      !editForm.hospital_id ||
-
-      !Number.isSafeInteger(hospitalId) ||
-
-      hospitalId <= 0
-
-    ) {
-
+    if (!editForm.hospital_id || !Number.isSafeInteger(hospitalId) || hospitalId <= 0) {
       setEditError('Please select a hospital')
-
       return
-
     }
-
-    if (
-
-      driverId !== null &&
-
-      (!Number.isSafeInteger(driverId) || driverId <= 0)
-
-    ) {
-
+    if (driverId !== null && (!Number.isSafeInteger(driverId) || driverId <= 0)) {
       setEditError('Invalid driver selection')
-
       return
-
     }
 
     setEditSaving(true)
-
     try {
-
-      const result = await apiRequest(
-
-        `/ambulances/${editingId}`,
-
-        {
-
-          method: 'PUT',
-
-          body: JSON.stringify({
-
-            plate_number: plate,
-
-            hospital_id: hospitalId,
-
-            driver_id: driverId
-
-          })
-
-        }
-
-      )
-
+      const result = await apiRequest(`/ambulances/${editingId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ plate_number: plate, hospital_id: hospitalId, driver_id: driverId })
+      })
       setEditingId(null)
-
-      setEditSuccess(
-
-        result.message || 'Ambulance updated successfully'
-
-      )
-
+      setEditSuccess(result.message || 'Ambulance updated successfully')
       await loadAmbulances()
-
     } catch (err) {
-
       setEditError(err.message || 'Failed to update ambulance')
-
     } finally {
-
       setEditSaving(false)
-
     }
-
   }
 
-  // ==========================================
-
-  // SEARCH AND FILTER
-
-  // ==========================================
-
   const filteredAmbulances = ambulances.filter((item) => {
-
     const query = search.trim().toLowerCase()
-
-    const matchesSearch = [
-
-      item.id,
-
-      item.plate_number,
-
-      item.hospital_name,
-
-      item.driver_name
-
-    ].some((value) =>
-
+    const matchesSearch = [item.id, item.plate_number, item.hospital_name, item.driver_name].some((value) =>
       String(value ?? '').toLowerCase().includes(query)
-
     )
-
-    const matchesStatus =
-
-      statusFilter === 'all' ||
-
-      item.status === statusFilter
-
+    const matchesStatus = statusFilter === 'all' || item.status === statusFilter
     return matchesSearch && matchesStatus
-
   })
 
-  // ==========================================
-
-  // FORMATTING
-
-  // ==========================================
-
   const formatStatus = (status) =>
+    String(status || 'Unknown').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 
-    String(status || 'Unknown')
-
-      .replaceAll('_', ' ')
-
-      .replace(/\b\w/g, (letter) => letter.toUpperCase())
-
-  const formatCoordinate = (value) =>
-
-    value === null || value === undefined
-
-      ? '—'
-
-      : String(value)
+  const formatCoordinate = (value) => (value === null || value === undefined ? '—' : String(value))
 
   const palette = {
     navy: '#102a43', red: '#e11d2a', ink: '#102a43', muted: '#657b96',
@@ -725,6 +295,7 @@ function AmbulanceManagement() {
     return <span style={{ display: 'inline-block', background, color, padding: '7px 11px', borderRadius: 999, fontWeight: 800, fontSize: 11, whiteSpace: 'nowrap' }}>{formatStatus(status)}</span>
   }
   const notice = (message, danger = false) => message && <div role={danger ? 'alert' : 'status'} style={{ background: danger ? '#fff1f2' : '#edfcf3', border: `1px solid ${danger ? '#fecdd3' : '#bbf7d0'}`, color: danger ? '#b91c1c' : '#166534', padding: '12px 15px', borderRadius: 9, marginBottom: 17, fontSize: 13 }}>{message}</div>
+  
   const availableCount = ambulances.filter(a => a.status === 'available').length
   const assignedCount = ambulances.filter(a => a.driver_id != null).length
   const activeCount = ambulances.length - availableCount

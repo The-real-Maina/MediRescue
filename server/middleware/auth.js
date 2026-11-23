@@ -108,7 +108,7 @@ exports.authenticate = async (req, res, next) => {
   else if (decoded.role === 'super_admin') {
     try {
       const [rows] = await pool.query(
-        `SELECT id, email FROM super_admin WHERE id = ?`,
+        `SELECT id, email FROM admin WHERE id = ?`,
         [decoded.id]
       );
 

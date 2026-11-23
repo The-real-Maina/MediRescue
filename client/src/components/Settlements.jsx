@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Settlements() {
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -7,7 +9,7 @@ export default function Settlements() {
 
   useEffect(() => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://192.168.137.1:5000/api/admin/settlements', {
+    fetch(`${API_BASE}/api/admin/settlements`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(async (res) => {

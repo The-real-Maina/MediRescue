@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function UserRoles() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,7 +11,7 @@ export default function UserRoles() {
 
   const fetchUsers = () => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://192.168.137.1:5000/api/admin/staff', {
+    fetch(`${API_BASE}/api/admin/staff`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -35,7 +37,7 @@ export default function UserRoles() {
 
     const token = localStorage.getItem('medirescue_token');
     try {
-      const res = await fetch(`http://192.168.137.1:5000/api/admin/users/${userId}/role`, {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ role: newRole })

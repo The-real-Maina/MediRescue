@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const API = 'http://192.168.137.1:5000/api/hospital-admin'
+// Uses VITE_API_URL from client/.env (falls back to localhost for development)
+const API_ORIGIN = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API = `${API_ORIGIN}/api/hospital-admin`
 
 const blankForm = {
   account_type: 'hospital_staff',

@@ -7,7 +7,7 @@ export default function AuditLogs() {
 
   useEffect(() => {
     const token = localStorage.getItem('medirescue_token');
-    fetch('http://192.168.137.1:5000/api/admin/audit-logs', {
+    fetch('/api/admin/audit-logs', {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(async (res) => {
@@ -41,7 +41,7 @@ export default function AuditLogs() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {logs.map((log) => (
             <div key={log.id} style={{ display: 'flex', gap: '15px' }}>
-              
+
               {/* Timeline Dot */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#2563eb', marginTop: '5px' }} />

@@ -15,11 +15,7 @@ const allowedOrigins = (process.env.CLIENT_ORIGIN || '')
   .filter(Boolean);
 
 app.use(
-  cors(
-    allowedOrigins.length
-      ? { origin: allowedOrigins }
-      : undefined
-  )
+  cors(allowedOrigins.length ? { origin: allowedOrigins } : undefined)
 );
 app.use(express.json());
 
@@ -36,7 +32,7 @@ app.use('/api/ambulances', require('./routes/ambulanceRoutes'));
 app.use('/api/assignments', require('./routes/assignmentRoutes'));
 app.use('/api/mpesa', require('./routes/mpesaRoutes'));
 app.use('/api/team-member', require('./routes/teamMemberRoutes'));
-app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes')); // file on disk must be named aiRoutes.js
 
 // Super Admin Routes
 app.use('/api/admin', require('./routes/adminAccountRoutes'));

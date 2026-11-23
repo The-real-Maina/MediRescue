@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = 'http://192.168.137.1:5000/api/admin'
+const API_ORIGIN = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_BASE = `${API_ORIGIN}/api/admin`
+
+// TEMPORARY DEBUG LINE: remove once the API address problem is solved
+console.log('API base is:', API_BASE)
+
 const blankStaff = {
   name: '',
   email: '',
@@ -162,8 +167,6 @@ function StaffManagement() {
     }
   }
 
-  // Closes the edit, reset-password and confirm panels so only one
-  // is open at a time.
   const resetPanels = () => {
     setEditingId(null)
     setEditForm({ ...blankEdit })
