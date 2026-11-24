@@ -1,8 +1,8 @@
 const pool = require('../config/db');
 
-// Simulation must be explicitly enabled in development.
+// Simulation runs only when PAYMENT_SIMULATION_ENABLED=true is set.
+// Leave it unset (or false) on any deployment that takes real payments.
 const simulationEnabled = () =>
-  process.env.NODE_ENV === 'development' &&
   process.env.PAYMENT_SIMULATION_ENABLED === 'true';
 
 exports.simulatePayment = async (req, res) => {
@@ -134,7 +134,7 @@ exports.simulatePayment = async (req, res) => {
     await connection.commit();
 
     return res.status(201).json({
-      message: 'Development payment simulation completed',
+      message: 'Payment simulation completed',
       simulated: true,
       payment_id: insert.insertId,
       case_id: caseId,

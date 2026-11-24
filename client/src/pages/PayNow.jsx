@@ -11,9 +11,12 @@ const API_URL = import.meta.env.VITE_API_URL || '/api'
 const POLL_INTERVAL = 10000
 const MAX_CHECKS = 12
 
-// The simulate section only exists while running `npm run dev`.
-// The server also refuses simulation unless it is enabled in .env.
-const SIMULATION_UI = import.meta.env.DEV
+// The simulate section shows under `npm run dev`, or in a build made
+// with VITE_SHOW_SIMULATOR=true (used for the demo deployment).
+// The server also refuses simulation unless PAYMENT_SIMULATION_ENABLED=true.
+const SIMULATION_UI =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_SHOW_SIMULATOR === 'true'
 
 const styles = {
   page: {
@@ -400,7 +403,7 @@ function PayNow() {
   const [notice, setNotice] = useState('')
   const [result, setResult] = useState(null)
 
-  // Development simulation state.
+  // Payment simulation state.
   const [simulating, setSimulating] = useState('')
   const [simMessage, setSimMessage] = useState(null)
 
@@ -797,7 +800,7 @@ function PayNow() {
   }
 
   // ==========================================
-  // DEVELOPMENT: SIMULATE PAYMENT
+  // SIMULATE PAYMENT (demo / development)
   // No money moves. Records a simulated payment
   // through POST /api/mpesa/simulate.
   // ==========================================
@@ -1309,18 +1312,18 @@ function PayNow() {
           </form>
         </section>
 
-        {/* DEVELOPMENT PAYMENT SIMULATION */}
+        {/* DEMO / DEVELOPMENT PAYMENT SIMULATION */}
         {SIMULATION_UI && (selectedCase || simMessage) && (
           <section style={styles.simulation}>
             <strong>
-              Development only: simulate a payment
+              Demo mode: simulate a payment
             </strong>
 
             <p style={{ margin: '8px 0 0' }}>
               Records a test payment for the selected
               case without sending an M-Pesa request.
-              No money moves. This section is not
-              included in a production build.
+              No money moves. Real M-Pesa payments need
+              approved production credentials.
             </p>
 
             {selectedCase && (
