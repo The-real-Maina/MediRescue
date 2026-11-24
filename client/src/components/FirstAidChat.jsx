@@ -8,10 +8,12 @@ const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000')
 // Panel sits above the theme toggle button in the bottom-right corner
 const BOTTOM_OFFSET = 84;
 
+const EMERGENCY_NOTE = ' If this is an emergency, call 999 or 112.';
+
 const GREETING =
   "Hi, I'm the MediRescue first-aid assistant. Your ambulance has been requested. Tell me what is happening and I'll guide you with basic first aid. I am not a doctor.";
 
-// The open button now lives on each case card (MyCases.jsx).
+// The open button lives on each case card (MyCases.jsx).
 // This component only draws the chat panel.
 export default function FirstAidChat({ open, onClose }) {
   const [messages, setMessages] = useState([]);
@@ -54,15 +56,10 @@ export default function FirstAidChat({ open, onClose }) {
 
       setMessages([...next, { role: 'assistant', content: data.reply }]);
     } catch (err) {
-      setMessages([
-        ...next,
-        {
-          role: 'assistant',
-          content:
-            (err.message || 'Assistant unavailable.') +
-            ' If this is an emergency, call 999 or 112.'
-        }
-      ]);
+      const base = err.message || 'Assistant unavailable.';
+      const content = /999|112/.test(base) ? base : base + EMERGENCY_NOTE;
+
+      setMessages([...next, { role: 'assistant', content }]);
     } finally {
       setLoading(false);
     }
