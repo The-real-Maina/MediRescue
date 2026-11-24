@@ -403,3 +403,47 @@ function MyCases() {
                       <strong style={styles.detailValue}>{hospitalName}</strong>
                     </div>
                     <div>
+                      <span style={styles.detailLabel}>Current Status</span>
+                      <strong style={styles.detailValue}>{formatStatus(caseItem.status)}</strong>
+                    </div>
+                  </div>
+
+                  {caseItem.status === 'dispatched' && <CaseChat caseId={caseId} />}
+
+                  {['paid', 'closed'].includes(caseItem.status) && (
+                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                      <h4 style={{ color: '#10243a', margin: '0 0 10px' }}>Payment Successful</h4>
+                      <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '15px' }}>
+                        Your payment for this emergency case has been confirmed. You can download your official receipt below.
+                      </p>
+                      <PaymentReceipt
+                        caseData={caseItem}
+                        patientName={user?.name || user?.full_name || 'Patient'}
+                      />
+                    </div>
+                  )}
+
+                  <ReportIssue caseId={caseId} />
+                </article>
+              )
+            })}
+          </section>
+        )}
+
+        <footer style={styles.footer}>
+          © {new Date().getFullYear()} MediRescue {' '}• Emergency Medical Response System
+        </footer>
+      </main>
+
+      {/* First-aid assistant panel — opened from the button on a live case */}
+      {!loading && !error && (
+        <FirstAidChat
+          open={aidOpen && hasActiveCase}
+          onClose={() => setAidOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+export default MyCases
