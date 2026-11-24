@@ -5,6 +5,9 @@ const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000')
   .replace(/\/+$/, '')
   .replace(/\/api$/, '');
 
+// Sits above the theme toggle button in the bottom-right corner
+const BOTTOM_OFFSET = 84;
+
 const GREETING =
   "Hi, I'm the MediRescue first-aid assistant. Your ambulance has been requested. Tell me what is happening and I'll guide you with basic first aid. I am not a doctor.";
 
@@ -99,7 +102,7 @@ export default function FirstAidChat() {
           style={{
             position: 'fixed',
             right: '20px',
-            bottom: '20px',
+            bottom: `${BOTTOM_OFFSET}px`,
             zIndex: 1000,
             background: '#e5232b',
             color: '#fff',
@@ -121,10 +124,10 @@ export default function FirstAidChat() {
           style={{
             position: 'fixed',
             right: '20px',
-            bottom: '20px',
+            bottom: `${BOTTOM_OFFSET}px`,
             zIndex: 1000,
             width: 'min(380px, calc(100vw - 40px))',
-            height: 'min(540px, calc(100vh - 40px))',
+            height: `min(540px, calc(100vh - ${BOTTOM_OFFSET + 20}px))`,
             background: '#fff',
             borderRadius: '16px',
             border: '1px solid #e2e8f0',
