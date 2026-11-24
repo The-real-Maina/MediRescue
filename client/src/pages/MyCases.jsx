@@ -11,7 +11,11 @@ import FirstAidChat from '../components/FirstAidChat'
 // ==========================================
 
 const REFRESH_INTERVAL = 10000
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
+// Works whether VITE_API_URL ends in /api or not
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000')
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '')
 
 // A case is "live" until it is paid or closed
 const ACTIVE_STATUSES = ['requested', 'assigned', 'dispatched', 'picked_up', 'in_treatment']

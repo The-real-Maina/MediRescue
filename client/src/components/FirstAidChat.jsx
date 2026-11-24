@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// Works whether VITE_API_URL ends in /api or not
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000')
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '');
 
 const GREETING =
   "Hi, I'm the MediRescue first-aid assistant. Your ambulance has been requested. Tell me what is happening and I'll guide you with basic first aid. I am not a doctor.";
@@ -37,7 +40,12 @@ export default function FirstAidChat() {
         body: JSON.stringify({ messages: next })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        throw new Error('Your session has expired. Please log in again.');
+      }
+
       if (!res.ok) throw new Error(data.message || 'Assistant unavailable.');
 
       setMessages([...next, { role: 'assistant', content: data.reply }]);
@@ -73,8 +81,15 @@ export default function FirstAidChat() {
     color: role === 'user' ? '#fff' : '#10243a',
     fontSize: '14px',
     lineHeight: 1.5,
-    whiteSpace: 'pre-wrap'
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere'
   });
+
+  const callLink = {
+    color: '#991b1b',
+    fontWeight: 'bold',
+    textDecoration: 'underline'
+  };
 
   return (
     <>
@@ -155,8 +170,9 @@ export default function FirstAidChat() {
               borderBottom: '1px solid #fecaca'
             }}
           >
-            Life-threatening emergency? Call <strong>999</strong> or{' '}
-            <strong>112</strong> now.
+            Life-threatening emergency? Call{' '}
+            <a href="tel:999" style={callLink}>999</a> or{' '}
+            <a href="tel:112" style={callLink}>112</a> now.
           </div>
 
           <div
