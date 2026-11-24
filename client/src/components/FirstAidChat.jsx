@@ -37,13 +37,19 @@ export default function FirstAidChat({ open, onClose }) {
     try {
       const token = localStorage.getItem('medirescue_token');
 
+      // Only role and content go to the server.
+      const payload = next.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+
       const res = await fetch(`${API_BASE}/api/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ messages: next })
+        body: JSON.stringify({ messages: payload })
       });
 
       const data = await res.json().catch(() => ({}));
@@ -54,7 +60,14 @@ export default function FirstAidChat({ open, onClose }) {
 
       if (!res.ok) throw new Error(data.message || 'Assistant unavailable.');
 
-      setMessages([...next, { role: 'assistant', content: data.reply }]);
+      setMessages([
+        ...next,
+        {
+          role: 'assistant',
+          content: data.reply,
+          builtin: data.source === 'builtin'
+        }
+      ]);
     } catch (err) {
       const base = err.message || 'Assistant unavailable.';
       const content = /999|112/.test(base) ? base : base + EMERGENCY_NOTE;
@@ -167,8 +180,27 @@ export default function FirstAidChat({ open, onClose }) {
         <div style={bubble('assistant')}>{GREETING}</div>
 
         {messages.map((m, i) => (
-          <div key={i} style={bubble(m.role)}>
-            {m.content}
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: m.role === 'user' ? 'flex-end' : 'flex-start'
+            }}
+          >
+            <div style={bubble(m.role)}>{m.content}</div>
+
+            {m.builtin && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: '#64748b',
+                  marginTop: '4px'
+                }}
+              >
+                Built-in first-aid guide
+              </span>
+            )}
           </div>
         ))}
 
