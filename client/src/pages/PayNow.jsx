@@ -11,13 +11,6 @@ const API_URL = import.meta.env.VITE_API_URL || '/api'
 const POLL_INTERVAL = 10000
 const MAX_CHECKS = 12
 
-// The simulate section shows under `npm run dev`, or in a build made
-// with VITE_SHOW_SIMULATOR=true (used for the demo deployment).
-// The server also refuses simulation unless PAYMENT_SIMULATION_ENABLED=true.
-const SIMULATION_UI =
-  import.meta.env.DEV ||
-  import.meta.env.VITE_SHOW_SIMULATOR === 'true'
-
 const styles = {
   page: {
     minHeight: '100vh',
@@ -291,6 +284,19 @@ const styles = {
     cursor: 'pointer'
   },
 
+  simulateButton: {
+    width: '100%',
+    padding: '16px 20px',
+    marginTop: 13,
+    background: '#2563eb',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 10,
+    fontSize: 15,
+    fontWeight: 800,
+    cursor: 'pointer'
+  },
+
   empty: {
     background: '#f8fafc',
     border: '1px dashed #cbd5e1',
@@ -311,51 +317,6 @@ const styles = {
     color: '#1e40af',
     fontSize: 13,
     lineHeight: 1.8
-  },
-
-  simulation: {
-    background: '#fffbeb',
-    border: '1px solid #fde68a',
-    borderLeft: '5px solid #d97706',
-    borderRadius: 12,
-    padding: '20px 22px',
-    marginTop: 28,
-    color: '#92400e',
-    fontSize: 13,
-    lineHeight: 1.8
-  },
-
-  simulationButtons: {
-    display: 'flex',
-    gap: 12,
-    flexWrap: 'wrap',
-    marginTop: 14
-  },
-
-  simulateSuccess: {
-    flex: 1,
-    minWidth: 180,
-    padding: '13px 16px',
-    background: '#d97706',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 9,
-    fontSize: 14,
-    fontWeight: 800,
-    cursor: 'pointer'
-  },
-
-  simulateFailed: {
-    flex: 1,
-    minWidth: 180,
-    padding: '13px 16px',
-    background: '#ffffff',
-    color: '#92400e',
-    border: '1px solid #d97706',
-    borderRadius: 9,
-    fontSize: 14,
-    fontWeight: 800,
-    cursor: 'pointer'
   },
 
   footer: {
@@ -404,7 +365,7 @@ function PayNow() {
   const [result, setResult] = useState(null)
 
   // Payment simulation state.
-  const [simulating, setSimulating] = useState('')
+  const [simulating, setSimulating] = useState(false)
   const [simMessage, setSimMessage] = useState(null)
 
   const timerRef = useRef(null)
@@ -685,10 +646,11 @@ function PayNow() {
   const handlePayment = async (event) => {
     event.preventDefault()
 
-    if (loading || checking) return
+    if (loading || checking || simulating) return
 
     setError('')
     setNotice('')
+    setSimMessage(null)
 
     const parsedCaseId = Number(caseId)
     const normalizedPhone = phone.replace(/\D/g, '')
@@ -800,12 +762,12 @@ function PayNow() {
   }
 
   // ==========================================
-  // SIMULATE PAYMENT (demo / development)
+  // SIMULATE PAYMENT (FOR TESTING)
   // No money moves. Records a simulated payment
   // through POST /api/mpesa/simulate.
   // ==========================================
 
-  const handleSimulate = async (outcome) => {
+  const handleSimulate = async () => {
     if (simulating || loading || checking) return
     if (!selectedCase) return
 
@@ -818,7 +780,7 @@ function PayNow() {
 
     const simulatedCaseId = Number(selectedCase.id)
 
-    setSimulating(outcome)
+    setSimulating(true)
     setSimMessage(null)
     setError('')
 
@@ -833,7 +795,7 @@ function PayNow() {
           },
           body: JSON.stringify({
             case_id: simulatedCaseId,
-            outcome
+            outcome: 'success'
           })
         }
       )
@@ -853,15 +815,17 @@ function PayNow() {
 
       if (!mountedRef.current) return
 
+      // Clear any earlier failed or pending attempt from the screen.
+      stopChecking()
+      setResult(null)
+      setNotice('')
+
       setSimMessage({
-        type: outcome === 'success' ? 'completed' : 'failed',
+        type: 'completed',
         text:
-          outcome === 'success'
-            ? `Simulated payment recorded for Case #${simulatedCaseId}: ` +
-              `KSh ${formatAmount(data.amount)}. No money was transferred. ` +
-              'The case is now paid and ready for hospital staff to close.'
-            : `Simulated failed payment recorded for Case #${simulatedCaseId}. ` +
-              'The case is still awaiting payment, so you can try again.'
+          `Payment Successful via M-Pesa (simulated) for Case #${simulatedCaseId}: ` +
+          `KSh ${formatAmount(data.amount)}. No money was transferred. ` +
+          'The case is now paid and ready for hospital staff to close.'
       })
 
       await loadCases()
@@ -875,7 +839,7 @@ function PayNow() {
       }
     } finally {
       if (mountedRef.current) {
-        setSimulating('')
+        setSimulating(false)
       }
     }
   }
@@ -922,11 +886,12 @@ function PayNow() {
     loading ||
     loadingCases ||
     checking ||
+    simulating ||
     !selectedCase ||
     (result && paymentStatus !== 'failed')
 
   const simulationDisabled =
-    Boolean(simulating) ||
+    simulating ||
     loading ||
     checking ||
     loadingCases ||
@@ -1135,7 +1100,6 @@ function PayNow() {
               <input
                 id="phone"
                 type="tel"
-                required
                 value={phone}
                 onChange={(event) =>
                   setPhone(event.target.value)
@@ -1309,64 +1273,24 @@ function PayNow() {
                   Check Payment Status →
                 </button>
               )}
-          </form>
-        </section>
 
-        {/* DEMO / DEVELOPMENT PAYMENT SIMULATION */}
-        {SIMULATION_UI && (selectedCase || simMessage) && (
-          <section style={styles.simulation}>
-            <strong>
-              Demo mode: simulate a payment
-            </strong>
-
-            <p style={{ margin: '8px 0 0' }}>
-              Records a test payment for the selected
-              case without sending an M-Pesa request.
-              No money moves. Real M-Pesa payments need
-              approved production credentials.
-            </p>
-
-            {selectedCase && (
-              <div style={styles.simulationButtons}>
-                <button
-                  type="button"
-                  disabled={simulationDisabled}
-                  onClick={() =>
-                    handleSimulate('success')
-                  }
-                  style={{
-                    ...styles.simulateSuccess,
-                    opacity: simulationDisabled ? 0.6 : 1,
-                    cursor: simulationDisabled
-                      ? 'not-allowed'
-                      : 'pointer'
-                  }}
-                >
-                  {simulating === 'success'
-                    ? 'Recording...'
-                    : `Simulate successful payment for Case #${selectedCase.id}`}
-                </button>
-
-                <button
-                  type="button"
-                  disabled={simulationDisabled}
-                  onClick={() =>
-                    handleSimulate('failed')
-                  }
-                  style={{
-                    ...styles.simulateFailed,
-                    opacity: simulationDisabled ? 0.6 : 1,
-                    cursor: simulationDisabled
-                      ? 'not-allowed'
-                      : 'pointer'
-                  }}
-                >
-                  {simulating === 'failed'
-                    ? 'Recording...'
-                    : 'Simulate failed payment'}
-                </button>
-              </div>
-            )}
+            {/* SIMULATE PAYMENT (FOR TESTING) */}
+            <button
+              type="button"
+              disabled={simulationDisabled}
+              onClick={handleSimulate}
+              style={{
+                ...styles.simulateButton,
+                opacity: simulationDisabled ? 0.6 : 1,
+                cursor: simulationDisabled
+                  ? 'not-allowed'
+                  : 'pointer'
+              }}
+            >
+              {simulating
+                ? 'Recording Payment...'
+                : '✎ Simulate Payment (For Testing)'}
+            </button>
 
             {simMessage && (
               <div
@@ -1377,14 +1301,14 @@ function PayNow() {
                   ...statusColors[simMessage.type],
                   marginTop: 16,
                   marginBottom: 0,
-                  fontSize: 13
+                  fontSize: 14
                 }}
               >
                 {simMessage.text}
               </div>
             )}
-          </section>
-        )}
+          </form>
+        </section>
 
         <section style={styles.sandbox}>
           <strong>
