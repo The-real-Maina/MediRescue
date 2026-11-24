@@ -104,6 +104,17 @@ const styles = {
     fontWeight: 800,
     cursor: 'pointer'
   },
+  firstAidButton: {
+    background: '#dc2626',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 20,
+    padding: '8px 14px',
+    fontSize: 12,
+    fontWeight: 800,
+    lineHeight: 1.3,
+    cursor: 'pointer'
+  },
   list: { display: 'flex', flexDirection: 'column', gap: 20 },
   card: {
     background: '#ffffff',
@@ -224,6 +235,7 @@ function MyCases() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [aidOpen, setAidOpen] = useState(false)
 
   // Safely get user for the receipt
   let user = {}
@@ -288,7 +300,7 @@ function MyCases() {
     ...(severityStyles[severity] || { background: '#f1f5f9', color: '#475569' })
   })
 
-  // Show the first-aid assistant only while at least one case is live
+  // The assistant is only available while at least one case is live
   const hasActiveCase = cases.some((c) => ACTIVE_STATUSES.includes(c.status))
 
   return (
@@ -349,6 +361,7 @@ function MyCases() {
             {cases.map((caseItem, index) => {
               const caseId = caseItem.id ?? caseItem.case_id ?? index + 1
               const hospitalName = caseItem.hospital_name || (caseItem.hospital_id ? `Hospital ${caseItem.hospital_id}` : 'Not yet assigned')
+              const isLive = ACTIVE_STATUSES.includes(caseItem.status)
 
               return (
                 <article key={caseId} style={styles.card}>
@@ -365,6 +378,15 @@ function MyCases() {
                         </span>
                       )}
                       <span style={getStatusStyle(caseItem.status)}>{formatStatus(caseItem.status)}</span>
+                      {isLive && (
+                        <button
+                          type="button"
+                          style={styles.firstAidButton}
+                          onClick={() => setAidOpen(true)}
+                        >
+                          ✚ First-Aid Help
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -381,42 +403,3 @@ function MyCases() {
                       <strong style={styles.detailValue}>{hospitalName}</strong>
                     </div>
                     <div>
-                      <span style={styles.detailLabel}>Current Status</span>
-                      <strong style={styles.detailValue}>{formatStatus(caseItem.status)}</strong>
-                    </div>
-                  </div>
-
-                  {caseItem.status === 'dispatched' && <CaseChat caseId={caseId} />}
-
-                  {['paid', 'closed'].includes(caseItem.status) && (
-                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-                      <h4 style={{ color: '#10243a', margin: '0 0 10px' }}>Payment Successful</h4>
-                      <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '15px' }}>
-                        Your payment for this emergency case has been confirmed. You can download your official receipt below.
-                      </p>
-                      <PaymentReceipt
-                        caseData={caseItem}
-                        patientName={user?.name || user?.full_name || 'Patient'}
-                      />
-                    </div>
-                  )}
-
-                  <ReportIssue caseId={caseId} />
-                </article>
-              )
-            })}
-          </section>
-        )}
-
-        <footer style={styles.footer}>
-          © {new Date().getFullYear()} MediRescue {' '}• Emergency Medical Response System
-        </footer>
-      </main>
-
-      {/* Floating first-aid assistant — live cases only */}
-      {!loading && !error && hasActiveCase && <FirstAidChat />}
-    </div>
-  )
-}
-
-export default MyCases
