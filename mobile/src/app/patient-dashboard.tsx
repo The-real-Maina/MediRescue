@@ -1,13 +1,11 @@
-
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/services/AuthContext';
 import { API_BASE_URL } from '@/constants/api';
@@ -75,8 +74,6 @@ export default function PatientDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [sendingSOS, setSendingSOS] = useState(false);
   const [casesVisible, setCasesVisible] = useState(false);
-  const [latestEmergency, setLatestEmergency] =
-    useState<EmergencyResponse | null>(null);
 
   const authenticatedFetch = useCallback(
     async (url: string, options: RequestInit = {}) => {
@@ -118,6 +115,11 @@ export default function PatientDashboard() {
   );
 
   const loadCases = useCallback(async () => {
+    if (!token) {
+      setRefreshing(false);
+      return;
+    }
+
     try {
       const data = await authenticatedFetch(`${API_BASE_URL}/cases`);
 
@@ -137,15 +139,28 @@ export default function PatientDashboard() {
       setLoadingCases(false);
       setRefreshing(false);
     }
-  }, [authenticatedFetch]);
+  }, [authenticatedFetch, token]);
 
-  useEffect(() => {
-    loadCases();
-  }, [loadCases]);
+  useFocusEffect(
+    useCallback(() => {
+      loadCases();
+    }, [loadCases]),
+  );
 
   const handleRefresh = () => {
     setRefreshing(true);
     loadCases();
+  };
+
+  const openCase = (caseId: number) => {
+    setCasesVisible(false);
+
+    setTimeout(() => {
+      router.push({
+        pathname: '/case-details',
+        params: { id: String(caseId) },
+      } as any);
+    }, 350);
   };
 
   const submitSOS = async () => {
@@ -175,15 +190,14 @@ export default function PatientDashboard() {
       const result = (await authenticatedFetch(`${API_BASE_URL}/cases`, {
         method: 'POST',
         body: JSON.stringify({
-          emergency_type: 'Medical Emergency',
-          emergency_desc: 'Patient requested emergency ambulance',
+          emergency_type: 'SOS Emergency',
+          emergency_desc:
+            'One-tap SOS triggered. Patient requires immediate assistance.',
+          severity: 'critical',
           pickup_lat: pickupLat,
           pickup_lng: pickupLng,
-          severity: 'moderate',
         }),
       })) as EmergencyResponse;
-
-      setLatestEmergency(result);
 
       await loadCases();
 
@@ -226,7 +240,7 @@ export default function PatientDashboard() {
 
     Alert.alert(
       'Confirm Emergency SOS',
-      'This will obtain your current GPS location and create a REAL emergency request in MediRescue. Only continue if you genuinely need emergency assistance.',
+      'This will obtain your current GPS location and create a REAL critical emergency request in MediRescue. Only continue if you genuinely need emergency assistance.',
       [
         {
           text: 'Cancel',
@@ -251,7 +265,7 @@ export default function PatientDashboard() {
           try {
             await signOut();
             router.replace('/');
-          } catch (error) {
+          } catch {
             Alert.alert(
               'Logout failed',
               'Unable to clear your session. Please try again.',
@@ -288,7 +302,12 @@ export default function PatientDashboard() {
   const latestCase = cases.length > 0 ? cases[0] : null;
 
   const renderCase = (item: PatientCase) => (
-    <View key={item.id} style={styles.caseCard}>
+    <TouchableOpacity
+      key={item.id}
+      style={styles.caseCard}
+      activeOpacity={0.8}
+      onPress={() => openCase(item.id)}
+    >
       <View style={styles.caseHeader}>
         <Text style={styles.caseNumber}>CASE #{item.id}</Text>
 
@@ -338,7 +357,9 @@ export default function PatientDashboard() {
       {item.dispute_status === 'open' && (
         <Text style={styles.disputeNotice}>You have an open dispute.</Text>
       )}
-    </View>
+
+      <Text style={styles.viewDetails}>View details ›</Text>
+    </TouchableOpacity>
   );
 
   return (
@@ -363,14 +384,10 @@ export default function PatientDashboard() {
             <Text style={styles.subtitle}>PATIENT PORTAL</Text>
           </View>
 
+          {/* UPDATED: Profile button now routes to the new Profile screen */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() =>
-              Alert.alert(
-                'My Profile',
-                `Name: ${user?.name || 'Patient'}\nRole: ${user?.role || 'patient'}`,
-              )
-            }
+            onPress={() => router.push('/profile')}
           >
             <Text style={styles.profileInitial}>
               {(user?.name || 'P').charAt(0).toUpperCase()}
@@ -394,7 +411,7 @@ export default function PatientDashboard() {
                 Need emergency help?
               </Text>
               <Text style={styles.emergencySubtitle}>
-                Request an ambulance using your phone's GPS location.
+                Request an ambulance using your phone’s GPS location.
               </Text>
             </View>
 
@@ -416,6 +433,19 @@ export default function PatientDashboard() {
                 SOS  •  REQUEST AMBULANCE
               </Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.describeButton,
+              sendingSOS && styles.disabledButton,
+            ]}
+            onPress={() => router.push('/request-emergency')}
+            disabled={sendingSOS}
+          >
+            <Text style={styles.describeText}>
+              Describe the emergency instead
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.emergencyNote}>
@@ -444,12 +474,7 @@ export default function PatientDashboard() {
 
           <TouchableOpacity
             style={styles.featureCard}
-            onPress={() =>
-              Alert.alert(
-                'Live Tracking',
-                'Ambulance live tracking will be connected in the next stage.',
-              )
-            }
+            onPress={() => router.push('/live-tracking')}
           >
             <Text style={styles.featureIcon}>📍</Text>
             <Text style={styles.featureTitle}>Live Tracking</Text>
@@ -460,12 +485,7 @@ export default function PatientDashboard() {
 
           <TouchableOpacity
             style={styles.featureCard}
-            onPress={() =>
-              Alert.alert(
-                'Health Profile',
-                'Your health profile will be connected in the next stage.',
-              )
-            }
+            onPress={() => router.push('/health-profile')}
           >
             <Text style={styles.featureIcon}>🩺</Text>
             <Text style={styles.featureTitle}>Health Profile</Text>
@@ -476,22 +496,22 @@ export default function PatientDashboard() {
 
           <TouchableOpacity
             style={styles.featureCard}
-            onPress={() =>
-              Alert.alert(
-                'Payments',
-                'Payment records will be connected in the next stage.',
-              )
-            }
+            onPress={() => router.push('/payments')}
           >
             <Text style={styles.featureIcon}>💳</Text>
             <Text style={styles.featureTitle}>Payments</Text>
             <Text style={styles.featureDescription}>
-              View payment records
+              Pay for your emergency care
             </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.statusCard}>
+        <TouchableOpacity
+          style={styles.statusCard}
+          activeOpacity={latestCase ? 0.8 : 1}
+          disabled={!latestCase}
+          onPress={() => latestCase && openCase(latestCase.id)}
+        >
           <View style={styles.statusHeader}>
             <Text style={styles.statusTitle}>Emergency Status</Text>
 
@@ -544,13 +564,14 @@ export default function PatientDashboard() {
               <Text style={styles.statusDescription}>
                 Hospital: {latestCase.hospital_name}
               </Text>
+              <Text style={styles.viewDetails}>View details ›</Text>
             </>
           ) : (
             <Text style={styles.statusDescription}>
               You currently have no emergency requests.
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.logoutButton}
@@ -574,7 +595,7 @@ export default function PatientDashboard() {
             <View>
               <Text style={styles.modalTitle}>My Cases</Text>
               <Text style={styles.modalSubtitle}>
-                Your emergency request history
+                Tap a case to see details and actions
               </Text>
             </View>
 
@@ -713,6 +734,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 54,
     justifyContent: 'center',
+  },
+  describeButton: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#57303B',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  describeText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '700',
   },
   disabledButton: {
     opacity: 0.6,
@@ -928,6 +962,13 @@ const styles = StyleSheet.create({
     color: COLORS.warning,
     fontSize: 11,
     marginTop: 10,
+  },
+  viewDetails: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    marginTop: 12,
   },
   centerContent: {
     flex: 1,

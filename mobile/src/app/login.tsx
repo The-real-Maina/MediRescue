@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,11 +17,38 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { API_BASE_URL } from '@/constants/api';
 import { authStorage } from '@/services/authStorage';
+import { useAuth } from '@/services/AuthContext';
 
 type UserRole = 'patient' | 'driver';
 
+const REQUEST_TIMEOUT_MS = 25000;
+const STORAGE_TIMEOUT_MS = 10000;
+
+// Rejects if a step takes too long, naming the step so we can see where
+// the login stalls.
+function withTimeout<T>(promise: Promise<T>, ms: number, step: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Timed out while: ${step}`)),
+      ms,
+    );
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export default function LoginScreen() {
   const router = useRouter();
+  const { refreshSession } = useAuth();
   const params = useLocalSearchParams<{ role?: string }>();
 
   const role: UserRole = params.role === 'driver' ? 'driver' : 'patient';
@@ -55,9 +81,20 @@ export default function LoginScreen() {
 
     setLoading(true);
 
+    const controller = new AbortController();
+    const requestTimer = setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS,
+    );
+
+    let step = 'contacting the server';
+
     try {
+      console.log('LOGIN: sending request to', `${API_BASE_URL}/auth/login`);
+
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
@@ -70,6 +107,10 @@ export default function LoginScreen() {
           role,
         }),
       });
+
+      console.log('LOGIN: response status', response.status);
+
+      step = 'reading the server response';
 
       // Read the response as text first so invalid JSON cannot crash silently.
       const responseText = await response.text();
@@ -92,8 +133,11 @@ export default function LoginScreen() {
       }
 
       if (!response.ok) {
+        // The server reports problems as { error: "..." }, so read that first.
         throw new Error(
-          data.message || `Login failed. HTTP ${response.status}.`,
+          data.error ||
+            data.message ||
+            `Login failed. HTTP ${response.status}.`,
         );
       }
 
@@ -104,8 +148,19 @@ export default function LoginScreen() {
           );
         }
 
-        await authStorage.saveSession(data.token, data.user);
+        step = 'saving your session on the phone';
+        await withTimeout(
+          authStorage.saveSession(data.token, data.user),
+          STORAGE_TIMEOUT_MS,
+          step,
+        );
 
+        // Load the freshly saved session into AuthContext so the dashboard
+        // has the token as soon as it opens.
+        step = 'loading your session';
+        await withTimeout(refreshSession(), STORAGE_TIMEOUT_MS, step);
+
+        console.log('LOGIN: success, opening dashboard');
         router.replace('/patient-dashboard');
         return;
       }
@@ -124,13 +179,23 @@ export default function LoginScreen() {
         'The server did not return the expected driver OTP challenge.',
       );
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Unable to connect to MediRescue.';
+      console.error('LOGIN error at step:', step, error);
+
+      let message: string;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message =
+          'The server did not answer within 25 seconds. If the server was ' +
+          'asleep, wait a moment and try again.';
+      } else if (error instanceof Error) {
+        message = error.message;
+      } else {
+        message = 'Unable to connect to MediRescue.';
+      }
 
       Alert.alert('Login unsuccessful', message);
     } finally {
+      clearTimeout(requestTimer);
       setLoading(false);
     }
   };

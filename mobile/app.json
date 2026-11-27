@@ -1,4 +1,3 @@
-
 {
   "expo": {
     "name": "MediRescue",
@@ -14,7 +13,6 @@
     },
     "android": {
       "package": "com.sirjarek.medirescue",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -30,7 +28,6 @@
     "plugins": [
       "expo-router",
       "expo-location",
-      "./plugins/withCleartextTraffic",
       [
         "expo-splash-screen",
         {

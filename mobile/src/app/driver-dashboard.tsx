@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
@@ -30,6 +29,8 @@ const COLORS = {
   border: '#263C54',
   yellow: '#F2C879',
 };
+
+type DriverAction = 'accept' | 'decline' | 'pickup' | 'arrive';
 
 export default function DriverDashboard() {
   const router = useRouter();
@@ -71,7 +72,6 @@ export default function DriverDashboard() {
           error instanceof Error
             ? error.message
             : 'Unable to retrieve assignments.';
-
         setOfferError(message);
       } finally {
         setLoadingOffers(false);
@@ -96,10 +96,7 @@ export default function DriverDashboard() {
     };
   }, [loadOffers]);
 
-  const performOfferAction = async (
-    caseId: number,
-    action: 'accept' | 'decline',
-  ) => {
+  const performAction = async (caseId: number, action: DriverAction) => {
     if (!token) {
       Alert.alert('Session expired', 'Please log in again.');
       return;
@@ -108,21 +105,41 @@ export default function DriverDashboard() {
     setActionCaseId(caseId);
 
     try {
-      if (action === 'accept') {
-        await assignmentService.acceptCase(caseId, token);
-      } else {
-        await assignmentService.declineCase(caseId, token);
+      switch (action) {
+        case 'accept':
+          await assignmentService.acceptCase(caseId, token);
+          break;
+        case 'decline':
+          await assignmentService.declineCase(caseId, token);
+          break;
+        case 'pickup':
+          await assignmentService.markPickup(caseId, token);
+          break;
+        case 'arrive':
+          await assignmentService.markArrived(caseId, token);
+          break;
       }
 
       setOffers((current) =>
-        current.filter((offer) => offer.id !== caseId),
+        current.filter((offer) => offer.id !== caseId || action !== 'decline'),
       );
 
+      const successMessage: Record<DriverAction, string> = {
+        accept: 'You have accepted this emergency assignment.',
+        decline: 'The emergency request has been returned to hospital staff.',
+        pickup: 'Patient pickup confirmed. Proceed to the hospital.',
+        arrive: 'Arrival confirmed. Awaiting hospital handover.',
+      };
+
       Alert.alert(
-        action === 'accept' ? 'Case accepted' : 'Case declined',
         action === 'accept'
-          ? 'You have accepted this emergency assignment.'
-          : 'The emergency request has been returned to hospital staff.',
+          ? 'Case accepted'
+          : action === 'decline'
+            ? 'Case declined'
+            : action === 'pickup'
+              ? 'Pickup confirmed'
+              : 'Arrival confirmed',
+        successMessage[action],
       );
 
       await loadOffers();
@@ -131,7 +148,6 @@ export default function DriverDashboard() {
         error instanceof Error
           ? error.message
           : 'Unable to process this assignment.';
-
       Alert.alert('Assignment unsuccessful', message);
       await loadOffers();
     } finally {
@@ -139,28 +155,42 @@ export default function DriverDashboard() {
     }
   };
 
-  const confirmOfferAction = (
-    caseId: number,
-    action: 'accept' | 'decline',
-  ) => {
+  const confirmAction = (caseId: number, action: DriverAction) => {
     const isAccept = action === 'accept';
+    const isDecline = action === 'decline';
 
-    Alert.alert(
-      isAccept ? 'Accept emergency?' : 'Decline emergency?',
-      isAccept
-        ? 'Are you ready to respond to this emergency?'
-        : 'Are you sure you want to return this request to hospital staff?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: isAccept ? 'Accept Case' : 'Decline Case',
-          style: isAccept ? 'default' : 'destructive',
-          onPress: () => {
-            void performOfferAction(caseId, action);
-          },
+    const titles: Record<DriverAction, string> = {
+      accept: 'Accept emergency?',
+      decline: 'Decline emergency?',
+      pickup: 'Confirm patient pickup?',
+      arrive: 'Confirm hospital arrival?',
+    };
+
+    const bodies: Record<DriverAction, string> = {
+      accept: 'Are you ready to respond to this emergency?',
+      decline:
+        'Are you sure you want to return this request to hospital staff?',
+      pickup: 'Confirm the patient is now on board your ambulance.',
+      arrive: 'Confirm you have arrived at the hospital with the patient.',
+    };
+
+    const buttons: Record<DriverAction, string> = {
+      accept: 'Accept Case',
+      decline: 'Decline Case',
+      pickup: 'Confirm Pickup',
+      arrive: 'Confirm Arrival',
+    };
+
+    Alert.alert(titles[action], bodies[action], [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: buttons[action],
+        style: isDecline ? 'destructive' : isAccept ? 'default' : 'default',
+        onPress: () => {
+          void performAction(caseId, action);
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleLogout = () => {
@@ -186,11 +216,7 @@ export default function DriverDashboard() {
 
   const formatDeadline = (deadline: string) => {
     const date = new Date(deadline);
-
-    if (Number.isNaN(date.getTime())) {
-      return deadline;
-    }
-
+    if (Number.isNaN(date.getTime())) return deadline;
     return date.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
@@ -204,23 +230,88 @@ export default function DriverDashboard() {
     if (latitude === null || longitude === null) {
       return 'Pickup coordinates unavailable';
     }
-
     return `${latitude}, ${longitude}`;
   };
 
-  const handleFeature = (feature: string) => {
-    Alert.alert(
-      feature,
-      `${feature} will be connected to the MediRescue backend in the next development stage.`,
+  const renderActionButtons = (offer: CaseOffer) => {
+    const status = (offer.status || 'assigned').toLowerCase();
+    const busy = actionCaseId !== null;
+
+    if (status === 'assigned' || status === 'pending') {
+      return (
+        <View style={styles.offerActions}>
+          <TouchableOpacity
+            style={[styles.acceptButton, busy && styles.disabledButton]}
+            disabled={busy}
+            onPress={() => confirmAction(offer.id, 'accept')}
+          >
+            {actionCaseId === offer.id ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.actionButtonText}>Accept Case</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.declineButton, busy && styles.disabledButton]}
+            disabled={busy}
+            onPress={() => confirmAction(offer.id, 'decline')}
+          >
+            <Text style={styles.declineButtonText}>Decline</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (status === 'accepted') {
+      return (
+        <View style={styles.offerActions}>
+          <TouchableOpacity
+            style={[styles.acceptButton, busy && styles.disabledButton]}
+            disabled={busy}
+            onPress={() => confirmAction(offer.id, 'pickup')}
+          >
+            {actionCaseId === offer.id ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.actionButtonText}>Confirm Pickup</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (status === 'picked_up' || status === 'en_route') {
+      return (
+        <View style={styles.offerActions}>
+          <TouchableOpacity
+            style={[styles.acceptButton, busy && styles.disabledButton]}
+            disabled={busy}
+            onPress={() => confirmAction(offer.id, 'arrive')}
+          >
+            {actionCaseId === offer.id ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.actionButtonText}>Confirm Arrival</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.offerActions}>
+        <View style={styles.statusOnlyBadge}>
+          <Text style={styles.statusOnlyText}>
+            {status.replace(/_/g, ' ').toUpperCase()}
+          </Text>
+        </View>
+      </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar
-        barStyle="light-content"
-        
-      />
+      <StatusBar barStyle="light-content" />
 
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
@@ -231,15 +322,16 @@ export default function DriverDashboard() {
             <Text style={styles.subtitle}>AMBULANCE DRIVER PORTAL</Text>
           </View>
 
-          <View style={styles.avatar}>
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={() => router.push('/profile')}
+          >
             <Text style={styles.avatarText}>{initials || 'D'}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.welcome}>
-          <Text style={styles.welcomeTitle}>
-            Welcome, {driverName} 🚑
-          </Text>
+          <Text style={styles.welcomeTitle}>Welcome, {driverName} 🚑</Text>
           <Text style={styles.welcomeSubtitle}>
             Stay ready. Every second matters.
           </Text>
@@ -288,16 +380,13 @@ export default function DriverDashboard() {
         {loadingOffers && offers.length === 0 ? (
           <View style={styles.emptyCard}>
             <ActivityIndicator color={COLORS.primary} size="large" />
-            <Text style={styles.emptyText}>
-              Loading your assignments...
-            </Text>
+            <Text style={styles.emptyText}>Loading your assignments...</Text>
           </View>
         ) : offerError && offers.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyIcon}>⚠️</Text>
             <Text style={styles.emptyTitle}>Unable to load assignments</Text>
             <Text style={styles.emptyText}>{offerError}</Text>
-
             <TouchableOpacity
               style={styles.retryButton}
               onPress={() => {
@@ -319,79 +408,55 @@ export default function DriverDashboard() {
             </Text>
           </View>
         ) : (
-          offers.map((offer) => (
-            <View key={offer.id} style={styles.offerCard}>
-              <View style={styles.offerHeader}>
-                <View>
-                  <Text style={styles.caseNumber}>
-                    EMERGENCY CASE #{offer.id}
-                  </Text>
-                  <Text style={styles.offerStatus}>AWAITING RESPONSE</Text>
-                </View>
-
-                <View style={styles.severityBadge}>
-                  <Text style={styles.severityText}>
-                    {(offer.severity || 'UNSPECIFIED').toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.emergencyLabel}>EMERGENCY DESCRIPTION</Text>
-              <Text style={styles.emergencyDescription}>
-                {offer.emergency_desc || 'No description provided.'}
-              </Text>
-
-              <View style={styles.offerDetail}>
-                <Text style={styles.detailLabel}>📍 PICKUP LOCATION</Text>
-                <Text style={styles.detailValue}>
-                  {formatCoordinates(offer.pickup_lat, offer.pickup_lng)}
-                </Text>
-              </View>
-
-              <View style={styles.offerDetail}>
-                <Text style={styles.detailLabel}>⏱ RESPONSE DEADLINE</Text>
-                <Text style={styles.deadlineValue}>
-                  {formatDeadline(offer.accept_deadline)}
-                </Text>
-              </View>
-
-              <View style={styles.offerActions}>
-                <TouchableOpacity
-                  style={[
-                    styles.acceptButton,
-                    actionCaseId === offer.id && styles.disabledButton,
-                  ]}
-                  disabled={actionCaseId !== null}
-                  onPress={() =>
-                    confirmOfferAction(offer.id, 'accept')
-                  }
-                >
-                  {actionCaseId === offer.id ? (
-                    <ActivityIndicator color={COLORS.white} />
-                  ) : (
-                    <Text style={styles.actionButtonText}>
-                      Accept Case
+          offers.map((offer) => {
+            const status = (offer.status || 'assigned').toLowerCase();
+            const isPending = status === 'assigned' || status === 'pending';
+            return (
+              <View key={offer.id} style={styles.offerCard}>
+                <View style={styles.offerHeader}>
+                  <View>
+                    <Text style={styles.caseNumber}>
+                      EMERGENCY CASE #{offer.id}
                     </Text>
-                  )}
-                </TouchableOpacity>
+                    <Text style={styles.offerStatus}>
+                      {isPending
+                        ? 'AWAITING RESPONSE'
+                        : status.replace(/_/g, ' ').toUpperCase()}
+                    </Text>
+                  </View>
 
-                <TouchableOpacity
-                  style={[
-                    styles.declineButton,
-                    actionCaseId === offer.id && styles.disabledButton,
-                  ]}
-                  disabled={actionCaseId !== null}
-                  onPress={() =>
-                    confirmOfferAction(offer.id, 'decline')
-                  }
-                >
-                  <Text style={styles.declineButtonText}>
-                    Decline
+                  <View style={styles.severityBadge}>
+                    <Text style={styles.severityText}>
+                      {(offer.severity || 'UNSPECIFIED').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.emergencyLabel}>
+                  EMERGENCY DESCRIPTION
+                </Text>
+                <Text style={styles.emergencyDescription}>
+                  {offer.emergency_desc || 'No description provided.'}
+                </Text>
+
+                <View style={styles.offerDetail}>
+                  <Text style={styles.detailLabel}>📍 PICKUP LOCATION</Text>
+                  <Text style={styles.detailValue}>
+                    {formatCoordinates(offer.pickup_lat, offer.pickup_lng)}
                   </Text>
-                </TouchableOpacity>
+                </View>
+
+                <View style={styles.offerDetail}>
+                  <Text style={styles.detailLabel}>⏱ RESPONSE DEADLINE</Text>
+                  <Text style={styles.deadlineValue}>
+                    {formatDeadline(offer.accept_deadline)}
+                  </Text>
+                </View>
+
+                {renderActionButtons(offer)}
               </View>
-            </View>
-          ))
+            );
+          })
         )}
 
         {offerError !== '' && offers.length > 0 && (
@@ -402,80 +467,70 @@ export default function DriverDashboard() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Response Operations</Text>
-          <Text style={styles.sectionHint}>
-            Manage your ambulance duties
-          </Text>
+          <Text style={styles.sectionHint}>Manage your ambulance duties</Text>
         </View>
 
         <TouchableOpacity
           style={styles.assignmentCard}
-          onPress={() => handleFeature('My Assignments')}
+          onPress={() => router.push('/driver-assignments')}
         >
           <View style={styles.assignmentIcon}>
             <Text style={styles.iconText}>📋</Text>
           </View>
-
           <View style={styles.assignmentContent}>
             <Text style={styles.cardTitle}>My Assignments</Text>
             <Text style={styles.cardDescription}>
               View incoming and active emergency cases.
             </Text>
           </View>
-
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.assignmentCard}
-          onPress={() => handleFeature('Patient Information')}
+          onPress={() => router.push('/driver-patient-info')}
         >
           <View style={styles.assignmentIcon}>
             <Text style={styles.iconText}>🩺</Text>
           </View>
-
           <View style={styles.assignmentContent}>
             <Text style={styles.cardTitle}>Patient Information</Text>
             <Text style={styles.cardDescription}>
               Access essential information for assigned cases.
             </Text>
           </View>
-
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.assignmentCard}
-          onPress={() => handleFeature('Navigation and Tracking')}
+          onPress={() => router.push('/driver-navigation')}
         >
           <View style={styles.assignmentIcon}>
             <Text style={styles.iconText}>📍</Text>
           </View>
-
           <View style={styles.assignmentContent}>
             <Text style={styles.cardTitle}>Navigation & Tracking</Text>
             <Text style={styles.cardDescription}>
               View patient locations and ambulance routes.
             </Text>
           </View>
-
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.assignmentCard}
-          onPress={() => handleFeature('Ambulance Status')}
+          onPress={() => router.push('/driver-ambulance-status')}
         >
           <View style={styles.assignmentIcon}>
             <Text style={styles.iconText}>🚑</Text>
           </View>
-
           <View style={styles.assignmentContent}>
             <Text style={styles.cardTitle}>Ambulance Status</Text>
             <Text style={styles.cardDescription}>
               Update your vehicle&apos;s operational status.
             </Text>
           </View>
-
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
 
@@ -492,10 +547,7 @@ export default function DriverDashboard() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
@@ -508,28 +560,16 @@ export default function DriverDashboard() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  container: {
-    padding: 20,
-    paddingBottom: 35,
-  },
+  safeArea: { flex: 1, backgroundColor: COLORS.background },
+  container: { padding: 20, paddingBottom: 35 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 30,
   },
-  brand: {
-    color: COLORS.white,
-    fontSize: 27,
-    fontWeight: '900',
-  },
-  brandAccent: {
-    color: COLORS.primary,
-  },
+  brand: { color: COLORS.white, fontSize: 27, fontWeight: '900' },
+  brandAccent: { color: COLORS.primary },
   subtitle: {
     color: COLORS.muted,
     fontSize: 9,
@@ -546,24 +586,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  welcome: {
-    marginBottom: 25,
-  },
-  welcomeTitle: {
-    color: COLORS.white,
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  welcomeSubtitle: {
-    color: COLORS.muted,
-    fontSize: 13,
-    marginTop: 7,
-  },
+  avatarText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
+  welcome: { marginBottom: 25 },
+  welcomeTitle: { color: COLORS.white, fontSize: 24, fontWeight: 'bold' },
+  welcomeSubtitle: { color: COLORS.muted, fontSize: 13, marginTop: 7 },
   availabilityCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 17,
@@ -608,15 +634,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.green,
     marginRight: 6,
   },
-  availableText: {
-    color: COLORS.green,
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
-  sectionHeader: {
-    marginBottom: 15,
-    marginTop: 5,
-  },
+  availableText: { color: COLORS.green, fontSize: 9, fontWeight: 'bold' },
+  sectionHeader: { marginBottom: 15, marginTop: 5 },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -628,11 +647,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     flexShrink: 1,
   },
-  sectionHint: {
-    color: COLORS.muted,
-    fontSize: 12,
-    marginTop: 5,
-  },
+  sectionHint: { color: COLORS.muted, fontSize: 12, marginTop: 5 },
   refreshButton: {
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 9,
@@ -640,11 +655,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginLeft: 8,
   },
-  refreshText: {
-    color: COLORS.white,
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  refreshText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
   emptyCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 15,
@@ -654,10 +665,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 25,
   },
-  emptyIcon: {
-    fontSize: 28,
-    marginBottom: 10,
-  },
+  emptyIcon: { fontSize: 28, marginBottom: 10 },
   emptyTitle: {
     color: COLORS.white,
     fontSize: 15,
@@ -671,11 +679,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 9,
   },
-  pollingText: {
-    color: COLORS.green,
-    fontSize: 10,
-    marginTop: 13,
-  },
+  pollingText: { color: COLORS.green, fontSize: 10, marginTop: 13 },
   retryButton: {
     backgroundColor: COLORS.primary,
     borderRadius: 9,
@@ -683,11 +687,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: 15,
   },
-  retryText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
+  retryText: { color: COLORS.white, fontSize: 12, fontWeight: 'bold' },
   offerCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
@@ -702,11 +702,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 18,
   },
-  caseNumber: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '900',
-  },
+  caseNumber: { color: COLORS.white, fontSize: 13, fontWeight: '900' },
   offerStatus: {
     color: COLORS.yellow,
     fontSize: 9,
@@ -720,11 +716,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
-  severityText: {
-    color: '#FF9CA4',
-    fontSize: 9,
-    fontWeight: '900',
-  },
+  severityText: { color: '#FF9CA4', fontSize: 9, fontWeight: '900' },
   emergencyLabel: {
     color: COLORS.muted,
     fontSize: 9,
@@ -744,27 +736,15 @@ const styles = StyleSheet.create({
     padding: 11,
     marginBottom: 9,
   },
-  detailLabel: {
-    color: COLORS.muted,
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  detailValue: {
-    color: COLORS.white,
-    fontSize: 11,
-    marginTop: 6,
-  },
+  detailLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '800' },
+  detailValue: { color: COLORS.white, fontSize: 11, marginTop: 6 },
   deadlineValue: {
     color: COLORS.yellow,
     fontSize: 12,
     fontWeight: 'bold',
     marginTop: 6,
   },
-  offerActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
-  },
+  offerActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   acceptButton: {
     flex: 1,
     backgroundColor: COLORS.green,
@@ -784,18 +764,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 46,
   },
-  actionButtonText: {
-    color: '#071B17',
-    fontSize: 12,
-    fontWeight: '900',
-  },
+  actionButtonText: { color: '#071B17', fontSize: 12, fontWeight: '900' },
   declineButtonText: {
     color: COLORS.primary,
     fontSize: 12,
     fontWeight: '900',
   },
-  disabledButton: {
-    opacity: 0.5,
+  disabledButton: { opacity: 0.5 },
+  statusOnlyBadge: {
+    flex: 1,
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 10,
+    padding: 13,
+    alignItems: 'center',
+  },
+  statusOnlyText: {
+    color: COLORS.yellow,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   backgroundError: {
     color: '#FF9CA4',
@@ -820,29 +807,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconText: {
-    fontSize: 21,
-  },
-  assignmentContent: {
-    flex: 1,
-    marginLeft: 13,
-  },
-  cardTitle: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+  iconText: { fontSize: 21 },
+  assignmentContent: { flex: 1, marginLeft: 13 },
+  cardTitle: { color: COLORS.white, fontSize: 14, fontWeight: 'bold' },
   cardDescription: {
     color: COLORS.muted,
     fontSize: 10,
     lineHeight: 16,
     marginTop: 5,
   },
-  arrow: {
-    color: COLORS.muted,
-    fontSize: 27,
-    marginLeft: 8,
-  },
+  arrow: { color: COLORS.muted, fontSize: 27, marginLeft: 8 },
   emergencyNotice: {
     flexDirection: 'row',
     backgroundColor: '#332C20',
@@ -852,18 +826,9 @@ const styles = StyleSheet.create({
     padding: 15,
     marginTop: 15,
   },
-  noticeIcon: {
-    fontSize: 22,
-    marginRight: 12,
-  },
-  noticeContent: {
-    flex: 1,
-  },
-  noticeTitle: {
-    color: '#F2C879',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
+  noticeIcon: { fontSize: 22, marginRight: 12 },
+  noticeContent: { flex: 1 },
+  noticeTitle: { color: '#F2C879', fontSize: 12, fontWeight: 'bold' },
   noticeDescription: {
     color: '#C5B99F',
     fontSize: 11,
@@ -878,11 +843,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 25,
   },
-  logoutText: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  logoutText: { color: COLORS.primary, fontWeight: 'bold', fontSize: 14 },
   footer: {
     color: '#687B90',
     fontSize: 10,

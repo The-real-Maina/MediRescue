@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,9 +17,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { API_BASE_URL } from '@/constants/api';
 import { authStorage } from '@/services/authStorage';
+import { useAuth } from '@/services/AuthContext';
+
+const REQUEST_TIMEOUT_MS = 25000;
 
 export default function DriverOtpScreen() {
   const router = useRouter();
+  const { refreshSession } = useAuth();
   const { challengeId } = useLocalSearchParams<{ challengeId: string }>();
 
   const [code, setCode] = useState('');
@@ -30,7 +33,7 @@ export default function DriverOtpScreen() {
     if (!/^\d{6}$/.test(code)) {
       Alert.alert(
         'Invalid verification code',
-        'Enter the six-digit code from your MediRescue server terminal.',
+        'Enter the six-digit verification code.',
       );
       return;
     }
@@ -45,25 +48,41 @@ export default function DriverOtpScreen() {
 
     setLoading(true);
 
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/auth/staff-otp/verify`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            challengeId,
-            code,
-          }),
-        },
-      );
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      const data = await response.json();
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/staff-otp/verify`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          challengeId,
+          code,
+        }),
+      });
+
+      const responseText = await response.text();
+      let data: any = {};
+
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        throw new Error(
+          `Server returned an invalid response (${response.status}).`,
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || 'OTP verification failed.');
+        // The server reports problems as { error: "..." }
+        throw new Error(
+          data.error ||
+            data.message ||
+            `Verification failed (${response.status}).`,
+        );
       }
 
       if (!data.token || !data.user) {
@@ -76,15 +95,24 @@ export default function DriverOtpScreen() {
 
       await authStorage.saveSession(data.token, data.user);
 
+      // Load the fresh session into AuthContext so the dashboard has the
+      // token as soon as it opens.
+      await refreshSession();
+
       router.replace('/driver-dashboard');
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Unable to verify your code.';
+      let message = 'Unable to verify your code.';
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message =
+          'The server did not answer within 25 seconds. Please try again.';
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
 
       Alert.alert('Verification unsuccessful', message);
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   };
@@ -136,8 +164,7 @@ export default function DriverOtpScreen() {
             </Text>
 
             <Text style={styles.description}>
-              Enter the six-digit verification code displayed in your
-              MediRescue backend terminal.
+              Enter the six-digit verification code for your driver account.
             </Text>
           </View>
 
@@ -185,9 +212,9 @@ export default function DriverOtpScreen() {
               Development mode
             </Text>
             <Text style={styles.noticeText}>
-              Your current backend development configuration prints the
-              OTP in the server terminal. This will later be replaced
-              with secure SMS delivery.
+              The code is currently printed in the server logs (the Render
+              Logs tab). This will later be replaced with secure SMS
+              delivery.
             </Text>
           </View>
 
