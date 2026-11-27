@@ -860,3 +860,57 @@ exports.verifyOtp = async (req, res) => {
     });
   }
 };
+
+// ==========================================
+// UPDATE PROFILE
+// ==========================================
+exports.updateProfile = async (req, res) => {
+  const { name, phone } = req.body || {};
+  const userId = req.user.id;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Name is required.' });
+  }
+
+  try {
+    if (phone) {
+      const [existing] = await pool.query(
+        'SELECT id FROM patient WHERE phone = ? AND id != ?',
+        [phone, userId]
+      );
+
+      if (existing.length > 0) {
+        return res.status(409).json({ error: 'This phone number is already in use.' });
+      }
+    }
+
+    await pool.query(
+      'UPDATE patient SET name = ?, phone = COALESCE(?, phone) WHERE id = ?',
+      [name, phone || null, userId]
+    );
+
+    return res.status(200).json({ message: 'Profile updated successfully' });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    return res.status(500).json({ error: 'Failed to update profile.' });
+  }
+};
+
+// ==========================================
+// TOGGLE 2FA (NEW)
+// ==========================================
+exports.toggle2FA = async (req, res) => {
+  const { enabled } = req.body;
+  const userId = req.user.id;
+
+  try {
+    await pool.query(
+      'UPDATE patient SET two_factor_enabled = ? WHERE id = ?',
+      [enabled ? 1 : 0, userId]
+    );
+    res.status(200).json({ message: `Two-factor authentication ${enabled ? 'enabled' : 'disabled'}.` });
+  } catch (err) {
+    console.error('2FA toggle error:', err);
+    res.status(500).json({ error: 'Failed to update 2FA settings.' });
+  }
+};

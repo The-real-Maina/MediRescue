@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 
@@ -34,5 +33,11 @@ router.post(
 
 // Change own password — authenticated users
 router.post('/change-password', authenticate, authPasswordController.changePassword);
+
+// Update own profile — authenticated users
+router.put('/profile', authenticate, authController.updateProfile);
+
+// Toggle 2FA — authenticated users
+router.put('/toggle-2fa', authenticate, authController.toggle2FA);
 
 module.exports = router;
